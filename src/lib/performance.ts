@@ -1,4 +1,4 @@
-import { getSupabase } from '@/lib/getSupabase()'
+import { getSupabase } from '@/lib/supabase'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
