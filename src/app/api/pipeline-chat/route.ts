@@ -1,43 +1,33 @@
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import OpenAI from 'openai'
+import { openai } from '@ai-sdk/openai'
+import { generateText } from 'ai'
 import { createClient } from '@supabase/supabase-js'
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const SYSTEM_PROMPT = `You are a pipeline assistant for a real estate agent. Your job is to help the agent log and manage their client leads through natural conversation.
+const SYSTEM_PROMPT = `You are a pipeline assistant for a real estate agent. Help the agent log and manage client leads through natural conversation.
 
-When the agent tells you about a client, extract:
-- lead_name: full name of the client
+When the agent mentions a client, extract:
+- lead_name: full name
 - stage: one of "new_lead", "contacted", "appointment_set", "under_contract", "closed" (default: "new_lead")
-- notes: any useful context (property type, budget, area, timeline, etc.)
+- notes: useful context (property type, area, budget, timeline, etc.)
 
-After extracting info, confirm what you captured and ask if anything else should be noted.
-
-If the agent asks to update an existing lead (move stage, add notes), confirm the change.
+After extracting info, confirm what you captured in 1-2 sentences.
 
 If no client info is given, ask: "Who's the new client? Tell me their name and where they're at."
 
-Always be brief — 1-3 sentences max. You're a tool, not a conversationalist.
+When you have enough info to create or update a lead, include this exact block at the END of your response:
+<action>{"type":"create_lead","lead_name":"...","stage":"...","notes":"..."}</action>
 
-Return a JSON action block when you have enough info to create or update a lead. Format:
-<action>
-{
-  "type": "create_lead" | "update_lead",
-  "lead_name": "...",
-  "stage": "...",
-  "notes": "...",
-  "lead_id": "..." (only for update_lead)
-}
-</action>
+For updates include lead_id:
+<action>{"type":"update_lead","lead_id":"...","stage":"...","notes":"..."}</action>
 
-Always include the action block when creating or updating — it will be parsed by the system.`
+Keep responses to 1-3 sentences. Be direct.`
 
 export async function POST(req: Request) {
   try {
@@ -50,29 +40,26 @@ export async function POST(req: Request) {
     // Get existing pipeline for context
     const { data: pipeline } = await supabase
       .from('pipeline')
-      .select('id, lead_name, stage, notes, last_contact')
+      .select('id, lead_name, stage, notes')
       .eq('agent_id', agentId)
       .order('last_contact', { ascending: false })
       .limit(20)
 
     const pipelineContext = pipeline?.length
       ? `\nCurrent pipeline (${pipeline.length} leads):\n` +
-        pipeline.map(l => `- ${l.lead_name} [${l.stage}] id:${l.id}`).join('\n')
+        pipeline.map((l: {id: string; lead_name: string; stage: string}) => `- ${l.lead_name} [${l.stage}] id:${l.id}`).join('\n')
       : '\nNo leads in pipeline yet.'
 
     const systemWithContext = SYSTEM_PROMPT + pipelineContext
 
-    // Call OpenAI
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+    const { text: reply } = await generateText({
+      model: openai('gpt-4o-mini'),
       messages: [
         { role: 'system', content: systemWithContext },
         ...messages,
       ],
-      max_tokens: 400,
+      maxTokens: 300,
     })
-
-    const reply = completion.choices[0]?.message?.content ?? ''
 
     // Parse action block
     const actionMatch = reply.match(/<action>([\s\S]*?)<\/action>/i)
@@ -95,13 +82,11 @@ export async function POST(req: Request) {
             .select()
             .single()
 
-          if (!error && data) {
-            actionResult = { type: 'created', lead: data }
-          }
+          if (!error && data) actionResult = { type: 'created', lead: data }
+          else if (error) console.error('[pipeline-chat] insert error:', error.message)
+
         } else if (action.type === 'update_lead' && action.lead_id) {
-          const updates: Record<string, string> = {
-            last_contact: new Date().toISOString(),
-          }
+          const updates: Record<string, string> = { last_contact: new Date().toISOString() }
           if (action.stage) updates.stage = action.stage
           if (action.notes) updates.notes = action.notes
 
@@ -113,9 +98,7 @@ export async function POST(req: Request) {
             .select()
             .single()
 
-          if (!error && data) {
-            actionResult = { type: 'updated', lead: data }
-          }
+          if (!error && data) actionResult = { type: 'updated', lead: data }
         }
       } catch (e) {
         console.error('[pipeline-chat] action parse error:', e)
