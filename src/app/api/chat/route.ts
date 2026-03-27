@@ -2,6 +2,14 @@ import { openai } from '@ai-sdk/openai'
 import { streamText } from 'ai'
 import { getSection } from '@/lib/prompts'
 import { saveMessage, getRecentMessages } from '@/lib/memory'
+import {
+  resolveLeadFromSession,
+  updateLeadIdentity,
+  updateLeadStage,
+  touchLead,
+  DEFAULT_AGENT_ID,
+} from '@/lib/identity'
+import { logActivity } from '@/lib/queries'
 
 // ─── BOOKING LINK ─────────────────────────────────────────────────────────────
 
@@ -106,9 +114,7 @@ When presenting a link:
 - do not add extra commentary after the link
 `
 
-// ─── CLOSE FALLBACK ───────────────────────────────────────────────────────────
-// Buffers the full stream, checks for booking signal, appends fallback if absent.
-// Also captures the full assistant text for memory persistence.
+// ─── STREAM WRAPPERS ──────────────────────────────────────────────────────────
 
 function buildCloseGuardStream(
   source: ReadableStream<Uint8Array>,
@@ -121,12 +127,10 @@ function buildCloseGuardStream(
   return new ReadableStream<Uint8Array>({
     start(controller) {
       const reader = source.getReader()
-
       async function pump() {
         while (true) {
           const { done, value } = await reader.read()
           if (done) {
-            // Append fallback if CLOSE response has no booking signal
             const hasLink = buffer.includes('http')
             const hasNextStep = buffer.includes('next 30 days')
             if (!hasLink && !hasNextStep) {
@@ -143,13 +147,11 @@ function buildCloseGuardStream(
           controller.enqueue(value)
         }
       }
-
       pump().catch((err) => controller.error(err))
     },
   })
 }
 
-// Standard capture stream for non-CLOSE stages — just captures text for memory.
 function buildCaptureStream(
   source: ReadableStream<Uint8Array>,
   onComplete: (fullText: string) => void
@@ -160,7 +162,6 @@ function buildCaptureStream(
   return new ReadableStream<Uint8Array>({
     start(controller) {
       const reader = source.getReader()
-
       async function pump() {
         while (true) {
           const { done, value } = await reader.read()
@@ -173,7 +174,6 @@ function buildCaptureStream(
           controller.enqueue(value)
         }
       }
-
       pump().catch((err) => controller.error(err))
     },
   })
@@ -185,14 +185,24 @@ export async function POST(req: Request) {
   const body = await req.json()
   const { messages, session_id, agent_id } = body
 
+  // ── Resolve lead from session ──────────────────────────────────────────────
+  // Looks up or creates a pipeline row bound to this session_id.
+  const lead = session_id
+    ? await resolveLeadFromSession(session_id)
+    : null
+
+  const agentId: string = lead?.agent_id || agent_id || DEFAULT_AGENT_ID
+
+  // ── Touch lead ─────────────────────────────────────────────────────────────
+  if (lead?.id) {
+    await touchLead(lead.id)
+  }
+
   // ── Load memory ────────────────────────────────────────────────────────────
-  // Retrieve last 10 messages for this session to inject as context.
   const memory = session_id ? await getRecentMessages(session_id, 10) : []
 
   // ── Stage resolution ───────────────────────────────────────────────────────
-  // Count is based on current messages only (not memory) to preserve stage logic.
   const step = messages.length
-
   const lastMessage = messages[messages.length - 1]?.content?.toLowerCase() || ''
 
   // Intent signals
@@ -215,9 +225,14 @@ export async function POST(req: Request) {
     lastMessage.includes('how does') ||
     lastMessage.includes('not sure')
 
+  const isBooked =
+    lastMessage.includes("let's do it") ||
+    lastMessage.includes('lets do it') ||
+    lastMessage.includes('booked') ||
+    lastMessage === 'yes'
+
   // Base stage from message count
   let stage: Stage
-
   if (step <= 1) stage = 'QUALIFY'
   else if (step === 2) stage = 'PAIN'
   else if (step === 3) stage = 'REFRAME'
@@ -230,9 +245,55 @@ export async function POST(req: Request) {
   if (isReadySignal && step >= 3) stage = 'CLOSE'
   if (isConfused && step >= 3) stage = 'POSITION'
 
-  const stageInstruction = stageInstructionMap[stage]
+  // ── Signal extraction ──────────────────────────────────────────────────────
+  // Detect identity fields from user message and persist to pipeline row.
+  if (lead?.id) {
+    const rawMessage = messages[messages.length - 1]?.content ?? ''
+    const extracted: Record<string, string> = {}
+
+    if (rawMessage.includes('@')) {
+      const emailMatch = rawMessage.match(/[\w.+-]+@[\w-]+\.[a-z]{2,}/i)
+      if (emailMatch) extracted.scout_email = emailMatch[0]
+    }
+
+    if (rawMessage.match(/\d{3}[-.\s]?\d{3}/)) {
+      const phoneMatch = rawMessage.match(/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/)
+      if (phoneMatch) extracted.scout_phone = phoneMatch[0]
+    }
+
+    const nameLower = rawMessage.toLowerCase()
+    if (nameLower.startsWith('my name is')) {
+      const name = rawMessage.slice(10).trim().split(/\s+/).slice(0, 3).join(' ')
+      if (name) {
+        extracted.scout_name = name
+        extracted.lead_name = name
+      }
+    }
+
+    if (Object.keys(extracted).length > 0) {
+      await updateLeadIdentity(lead.id, extracted)
+    }
+  }
+
+  // ── Auto-stage pipeline ────────────────────────────────────────────────────
+  if (lead?.id) {
+    if (isBooked) {
+      await updateLeadStage(lead.id, 'qualified')
+    } else if (isReadySignal) {
+      await updateLeadStage(lead.id, 'engaged')
+    }
+  }
+
+  // ── Activity log ───────────────────────────────────────────────────────────
+  await logActivity({
+    agent_id: agentId,
+    action_type: 'scout_interaction',
+    description: `Scout interaction — session: ${session_id ?? 'anonymous'}, lead: ${lead?.id ?? 'none'}, stage: ${stage}`,
+    outcome: 'neutral',
+  })
 
   // ── Build system prompt ────────────────────────────────────────────────────
+  const stageInstruction = stageInstructionMap[stage]
   const systemPrompt = `
 ${basePrompt}
 
@@ -248,7 +309,7 @@ INSTRUCTION: ${stageInstruction}
 `.trim()
 
   // ── Build message stack ────────────────────────────────────────────────────
-  // Order: system → memory (historical) → current messages (latest input)
+  // Order: system → memory (historical) → current messages
   const messageStack = [
     { role: 'system' as const, content: systemPrompt },
     ...memory,
@@ -259,7 +320,7 @@ INSTRUCTION: ${stageInstruction}
   const userContent = messages[messages.length - 1]?.content ?? ''
   if (session_id && userContent) {
     await saveMessage({
-      agentId: agent_id ?? null,
+      agentId,
       sessionId: session_id,
       role: 'user',
       content: userContent,
@@ -273,14 +334,13 @@ INSTRUCTION: ${stageInstruction}
   })
 
   const baseResponse = result.toTextStreamResponse()
-
   if (!baseResponse.body) return baseResponse
 
-  // ── Wrap stream to capture assistant text + enforce CLOSE guard ────────────
+  // ── Wrap stream — capture assistant text + enforce CLOSE guard ─────────────
   const saveAssistant = (fullText: string) => {
     if (session_id && fullText) {
       saveMessage({
-        agentId: agent_id ?? null,
+        agentId,
         sessionId: session_id,
         role: 'assistant',
         content: fullText,
