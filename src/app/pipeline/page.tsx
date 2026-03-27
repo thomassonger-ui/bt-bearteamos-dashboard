@@ -93,11 +93,9 @@ export default function PipelinePage() {
   function toggleVoice() {
     if (typeof window === 'undefined') return
 
-    const SpeechRecognition =
-      (window as Window & { SpeechRecognition?: typeof window.SpeechRecognition; webkitSpeechRecognition?: typeof window.SpeechRecognition }).SpeechRecognition ||
-      (window as Window & { SpeechRecognition?: typeof window.SpeechRecognition; webkitSpeechRecognition?: typeof window.SpeechRecognition }).webkitSpeechRecognition
-
-    if (!SpeechRecognition) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SR) {
       alert('Voice input is not supported in this browser. Try Chrome.')
       return
     }
@@ -108,12 +106,14 @@ export default function PipelinePage() {
       return
     }
 
-    const recognition = new SpeechRecognition()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const recognition = new SR() as any
     recognition.lang = 'en-US'
     recognition.continuous = false
     recognition.interimResults = false
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript
       setListening(false)
       sendMessage(transcript)
