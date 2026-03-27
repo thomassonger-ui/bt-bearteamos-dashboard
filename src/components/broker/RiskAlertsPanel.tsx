@@ -15,9 +15,12 @@ const h72 = 3 * 24 * 60 * 60 * 1000
 export default function RiskAlertsPanel({ agents, tasks, pipeline, onSelectAgent }: Props) {
   const now = Date.now()
 
+  // Critical agents (inactivity_streak ≥ 5) — hard enforcement tier
+  const criticalAgents = agents.filter((a) => (a.inactivity_streak ?? 0) >= 5)
+
   // Inactive agents
   const inactiveAgents = agents.filter(
-    (a) => !a.last_active || now - new Date(a.last_active).getTime() >= h24
+    (a) => (a.inactivity_streak ?? 0) < 5 && (!a.last_active || now - new Date(a.last_active).getTime() >= h24)
   )
 
   // High missed tasks (>3)
@@ -39,7 +42,7 @@ export default function RiskAlertsPanel({ agents, tasks, pipeline, onSelectAgent
 
   const agentName = (id: string) => agents.find((a) => a.id === id)?.name ?? id
 
-  const hasAlerts = inactiveAgents.length > 0 || highMissed.length > 0 || highOverdue.length > 0 || staleLeads.length > 0
+  const hasAlerts = criticalAgents.length > 0 || inactiveAgents.length > 0 || highMissed.length > 0 || highOverdue.length > 0 || staleLeads.length > 0
 
   return (
     <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6 }}>
@@ -49,7 +52,7 @@ export default function RiskAlertsPanel({ agents, tasks, pipeline, onSelectAgent
         </div>
         {hasAlerts && (
           <div style={{ fontSize: 11, color: 'var(--bt-red)', fontWeight: 600 }}>
-            {inactiveAgents.length + highMissed.length + highOverdue.length + staleLeads.length} items
+            {criticalAgents.length + inactiveAgents.length + highMissed.length + highOverdue.length + staleLeads.length} items
           </div>
         )}
       </div>
@@ -57,6 +60,19 @@ export default function RiskAlertsPanel({ agents, tasks, pipeline, onSelectAgent
       <div style={{ padding: '12px 20px' }}>
         {!hasAlerts && (
           <div style={{ fontSize: 13, color: 'var(--bt-text-dim)', padding: '8px 0' }}>No active risk alerts.</div>
+        )}
+
+        {criticalAgents.length > 0 && (
+          <AlertSection title="⚠ Critical — Immediate Action Required" color="var(--bt-red)">
+            {criticalAgents.map((a) => (
+              <AlertRow key={a.id} onClick={() => onSelectAgent(a.id)}>
+                <span style={{ fontWeight: 600 }}>{a.name}</span>
+                <span style={{ color: 'var(--bt-red)', fontSize: 12, fontWeight: 600 }}>
+                  {a.inactivity_streak}d inactive streak
+                </span>
+              </AlertRow>
+            ))}
+          </AlertSection>
         )}
 
         {inactiveAgents.length > 0 && (
