@@ -1,48 +1,50 @@
-import type { Agent, Task } from '@/types'
+import type { Task } from '@/types'
 import {
   getLastActivityTime,
   getStalePipelineLeads,
-  getTasks,
   createTask,
   markOverdueTasks,
   logActivity,
   updateAgentLastActive,
+  ruleTaskExists,
+  countPendingOnboardingTasks,
+  deduplicateTasks,
 } from './queries'
 
 // ─── MAIN ENGINE ENTRY POINT ─────────────────────────────────────────────────
 // Called on: dashboard load, login
-// Runs all 4 rules in order, inserts tasks if triggered, marks overdue
+// Runs all 4 rules in order — fully idempotent via source_rule + source_ref
 
 export async function runEngine(agentId: string): Promise<void> {
-  // 0. Mark overdue first (pending tasks past due_date)
-  await markOverdueTasks(agentId)
+  // 0. Safety pass: remove any exact duplicate pending tasks (same title)
+  await deduplicateTasks(agentId)
 
-  // 1. Fetch current state
-  const [lastActivity, existingTasks] = await Promise.all([
-    getLastActivityTime(agentId),
-    getTasks(agentId),
-  ])
+  // 0b. Mark overdue (pending tasks past due_date)
+  await markOverdueTasks(agentId)
 
   const now = new Date()
 
   // ── RULE 1: Inactivity Recovery ──────────────────────────────────────────
-  // IF no activity_log entry in last 24 hours → create recovery task
+  // Trigger: no activity_log entry in last 24 hours
+  // Idempotency: source_rule='inactivity', source_ref=today's date (YYYY-MM-DD)
+  const lastActivity = await getLastActivityTime(agentId)
   const hoursInactive = lastActivity
     ? (now.getTime() - lastActivity.getTime()) / (1000 * 60 * 60)
     : 999
 
   if (hoursInactive >= 24) {
-    const alreadyExists = existingTasks.some(
-      (t) => t.type === 'recovery' && (t.status === 'pending' || t.status === 'overdue')
-    )
-    if (!alreadyExists) {
+    const todayKey = now.toISOString().slice(0, 10) // YYYY-MM-DD
+    const exists = await ruleTaskExists(agentId, 'inactivity', todayKey)
+    if (!exists) {
       await createTask({
         agent_id: agentId,
         type: 'recovery',
         title: 'Complete 10 follow-ups today',
         description: `No system activity in ${Math.floor(hoursInactive)}h. Recovery required before pipeline work.`,
         status: 'pending',
-        due_date: new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString(), // due in 4h
+        due_date: new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString(),
+        source_rule: 'inactivity',
+        source_ref: todayKey,
       })
       await logActivity({
         agent_id: agentId,
@@ -54,17 +56,14 @@ export async function runEngine(agentId: string): Promise<void> {
   }
 
   // ── RULE 2: Pipeline Stall ────────────────────────────────────────────────
-  // IF pipeline.last_contact > 3 days → create follow-up task per stale lead
+  // Trigger: pipeline.last_contact > 3 days
+  // Idempotency: source_rule='pipeline_stall', source_ref=lead.id (per lead)
   const staleLeads = await getStalePipelineLeads(agentId, 3)
+  let rule2Created = 0
 
   for (const lead of staleLeads) {
-    const followUpExists = existingTasks.some(
-      (t) =>
-        t.type === 'follow_up' &&
-        t.title.includes(lead.lead_name) &&
-        (t.status === 'pending' || t.status === 'overdue')
-    )
-    if (!followUpExists) {
+    const exists = await ruleTaskExists(agentId, 'pipeline_stall', lead.id)
+    if (!exists) {
       const daysSince = Math.floor(
         (now.getTime() - new Date(lead.last_contact).getTime()) / (1000 * 60 * 60 * 24)
       )
@@ -74,23 +73,26 @@ export async function runEngine(agentId: string): Promise<void> {
         title: `Follow up with ${lead.lead_name}`,
         description: `No contact in ${daysSince} days. Stage: ${lead.stage}. Action required today.`,
         status: 'pending',
-        due_date: new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(), // due in 2h
+        due_date: new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(),
+        source_rule: 'pipeline_stall',
+        source_ref: lead.id,
       })
+      rule2Created++
     }
   }
 
-  if (staleLeads.length > 0) {
+  if (rule2Created > 0) {
     await logActivity({
       agent_id: agentId,
       action_type: 'engine_rule_triggered',
-      description: `Rule 2: ${staleLeads.length} stale pipeline lead(s) — follow-up tasks created`,
+      description: `Rule 2: ${rule2Created} stale pipeline lead(s) — follow-up task(s) created`,
       outcome: 'neutral',
     })
   }
 
   // ── RULE 3: Onboarding Enforcement ───────────────────────────────────────
-  // IF onboarding_stage < 30 → ensure minimum 5 pending/overdue tasks exist
-  // Fetch agent inline to get onboarding_stage
+  // Trigger: onboarding_stage < 30
+  // Idempotency: source_rule='onboarding', source_ref=title_slug — counted via countPendingOnboardingTasks
   const { supabase } = await import('./supabase')
   const { data: agentRow } = await supabase
     .from('agents')
@@ -101,41 +103,41 @@ export async function runEngine(agentId: string): Promise<void> {
   const onboardingDay: number = agentRow?.onboarding_stage ?? 0
 
   if (onboardingDay < 30) {
-    const activeTasks = existingTasks.filter(
-      (t) => t.status === 'pending' || t.status === 'overdue'
-    )
-    const needed = 5 - activeTasks.length
+    const ONBOARDING_TASKS = [
+      { title: 'Review BearTeam Standards & Practices', slug: 'review-standards' },
+      { title: 'Schedule 1:1 with Tom Songer', slug: 'schedule-1on1' },
+      { title: 'Complete MLS profile setup', slug: 'mls-profile' },
+      { title: 'Log first 3 lead contacts in pipeline', slug: 'log-leads' },
+      { title: 'Complete BearTeam Academy Week 1 module', slug: 'academy-week1' },
+    ]
+
+    const pendingCount = await countPendingOnboardingTasks(agentId)
+    const needed = 5 - pendingCount
+    let rule3Created = 0
 
     if (needed > 0) {
-      const ONBOARDING_TASKS = [
-        { title: 'Review BearTeam Standards & Practices', type: 'onboarding' },
-        { title: 'Schedule 1:1 with Tom Songer', type: 'onboarding' },
-        { title: 'Complete MLS profile setup', type: 'onboarding' },
-        { title: 'Log first 3 lead contacts in pipeline', type: 'onboarding' },
-        { title: 'Complete BearTeam Academy Week 1 module', type: 'onboarding' },
-      ]
-      // Only create tasks not already in existingTasks by title
-      let created = 0
       for (const t of ONBOARDING_TASKS) {
-        if (created >= needed) break
-        const titleExists = existingTasks.some((e) => e.title === t.title)
-        if (!titleExists) {
+        if (rule3Created >= needed) break
+        const exists = await ruleTaskExists(agentId, 'onboarding', t.slug)
+        if (!exists) {
           await createTask({
             agent_id: agentId,
-            type: t.type,
+            type: 'onboarding',
             title: t.title,
             description: `Onboarding requirement (Day ${onboardingDay}). Must be completed in Foundation phase.`,
             status: 'pending',
             due_date: new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+            source_rule: 'onboarding',
+            source_ref: t.slug,
           })
-          created++
+          rule3Created++
         }
       }
-      if (created > 0) {
+      if (rule3Created > 0) {
         await logActivity({
           agent_id: agentId,
           action_type: 'engine_rule_triggered',
-          description: `Rule 3: Onboarding enforcement — ${created} task(s) added to meet minimum 5`,
+          description: `Rule 3: Onboarding enforcement — ${rule3Created} task(s) added to meet minimum 5`,
           outcome: 'neutral',
         })
       }
@@ -143,18 +145,21 @@ export async function runEngine(agentId: string): Promise<void> {
   }
 
   // ── RULE 4: Missed Task Pressure ─────────────────────────────────────────
-  // IF task.status = missed → create replacement task due tomorrow
-  const missedTasks = existingTasks.filter((t) => t.status === 'missed')
+  // Trigger: task.status = 'missed'
+  // Idempotency: source_rule='retry', source_ref=original_task.id
+  const { data: missedRows } = await supabase
+    .from('tasks')
+    .select('*')
+    .eq('agent_id', agentId)
+    .eq('status', 'missed')
+
+  const missedTasks = (missedRows ?? []) as Task[]
   const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()
+  let rule4Created = 0
 
   for (const missed of missedTasks) {
-    // Check if a replacement already exists
-    const replacementExists = existingTasks.some(
-      (t) =>
-        t.title === `[Retry] ${missed.title}` &&
-        (t.status === 'pending' || t.status === 'overdue')
-    )
-    if (!replacementExists) {
+    const exists = await ruleTaskExists(agentId, 'retry', missed.id)
+    if (!exists) {
       await createTask({
         agent_id: agentId,
         type: missed.type,
@@ -162,20 +167,23 @@ export async function runEngine(agentId: string): Promise<void> {
         description: `Missed yesterday. This must be completed today. ${missed.description}`,
         status: 'pending',
         due_date: tomorrow,
+        source_rule: 'retry',
+        source_ref: missed.id,
       })
+      rule4Created++
     }
   }
 
-  if (missedTasks.length > 0) {
+  if (rule4Created > 0) {
     await logActivity({
       agent_id: agentId,
       action_type: 'engine_rule_triggered',
-      description: `Rule 4: ${missedTasks.length} missed task(s) — replacement tasks created`,
+      description: `Rule 4: ${rule4Created} missed task(s) — replacement task(s) created`,
       outcome: 'neutral',
     })
   }
 
-  // 5. Update agent's last_active timestamp
+  // Final: update agent last_active timestamp
   await updateAgentLastActive(agentId)
 }
 
