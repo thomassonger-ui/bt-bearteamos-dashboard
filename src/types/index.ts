@@ -8,6 +8,8 @@ export interface Agent {
   stage: string               // existing column: 'Onboarding' | 'Active' etc
   onboarding_stage: number    // days into onboarding (0–90+)
   last_active: string         // ISO timestamp
+  inactivity_streak: number   // consecutive days inactive (≥24h each)
+  missed_streak: number       // consecutive engine runs with ≥2 missed tasks in 48h
   start_date?: string
   created_at: string
   updated_at?: string
