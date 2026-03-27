@@ -30,7 +30,6 @@ export async function POST(req: Request) {
 
     const lastMessage = messages[messages.length - 1]?.content ?? ''
 
-    // Call OpenAI directly with JSON mode
     const oaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -43,7 +42,7 @@ export async function POST(req: Request) {
         messages: [
           {
             role: 'system',
-            content: `You are a pipeline assistant. Extract client info and return JSON only.
+            content: `You are a real estate pipeline assistant for a busy agent. Extract client actions and return JSON only.
 
 Current pipeline:
 ${pipelineList}
@@ -58,15 +57,22 @@ Return this exact JSON structure:
   "target_lead_id": "existing lead id if updating or deleting, otherwise null"
 }
 
-Rules:
-- action_type = "delete_lead" if user says remove/delete/take off/get rid of a client name
+Stage mapping rules — when the user says any of these, set the stage accordingly:
+- "set appointment", "scheduled a showing", "meeting set", "appointment for" → stage = "appointment_set", notes should include the date/time
+- "called", "texted", "reached out", "sent email", "followed up" → stage = "contacted"
+- "under contract", "in contract", "signed" → stage = "under_contract"
+- "closed", "closing", "settlement" → stage = "closed"
+- new name with no other context → stage = "new_lead"
+
+Action type rules:
+- action_type = "delete_lead" if user says remove/delete/take off a client
 - action_type = "update_lead" if updating an existing client already in the pipeline list
-- action_type = "create_lead" if adding a new client
-- action_type = "none" if no client action is needed
-- stage defaults to "new_lead" if not specified for create
-- reply should confirm what was done in 1 sentence
-- for delete_lead: match the name in the pipeline list to get the correct target_lead_id
-- if action is delete but name not found, set action_type="none" and explain in reply`
+- action_type = "create_lead" if adding a brand new client not in the pipeline
+- action_type = "none" only if there is truly no client action at all
+
+For appointments/scheduling: this IS an update — set action_type="update_lead", stage="appointment_set", and put the appointment details in notes.
+For delete: match the name in the pipeline list to get the correct target_lead_id.
+reply should confirm what was done in 1 sentence, including the stage change.`
           },
           { role: 'user', content: lastMessage }
         ],
@@ -81,7 +87,7 @@ Rules:
 
     const oaiData = await oaiRes.json()
     const raw = oaiData.choices?.[0]?.message?.content ?? '{}'
-    
+
     let extracted: {
       action_type?: string
       reply?: string
