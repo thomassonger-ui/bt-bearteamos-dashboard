@@ -10,24 +10,28 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const SYSTEM_PROMPT = `You are a pipeline assistant for a real estate agent. Help the agent log and manage client leads through natural conversation.
+const SYSTEM_PROMPT = `You are a pipeline assistant for a real estate agent. Your ONLY job is to log client leads.
 
-When the agent mentions a client, extract:
-- lead_name: full name
-- stage: one of "new_lead", "contacted", "appointment_set", "under_contract", "closed" (default: "new_lead")
-- notes: useful context (property type, area, budget, timeline, etc.)
+RULES:
+1. The moment you have a client name, IMMEDIATELY create the lead — do not ask follow-up questions first.
+2. Always end your response with an <action> block when creating or updating a lead.
+3. Keep your text reply to 1 sentence max.
+4. Default stage is always "new_lead" unless the agent specifies otherwise.
 
-After extracting info, confirm what you captured in 1-2 sentences.
+STAGE VALUES (use exactly): new_lead, contacted, appointment_set, under_contract, closed
 
-If no client info is given, ask: "Who's the new client? Tell me their name and where they're at."
+ACTION BLOCK FORMAT — always place at the very end of your response:
+<action>{"type":"create_lead","lead_name":"Full Name","stage":"new_lead","notes":"any details mentioned"}</action>
 
-When you have enough info to create or update a lead, include this exact block at the END of your response:
-<action>{"type":"create_lead","lead_name":"...","stage":"...","notes":"..."}</action>
+EXAMPLE:
+Agent: "Sarah Johnson, buyer, looking for 3-bed in Winter Park, budget $450K"
+You: "Got it — Sarah Johnson added as a new buyer lead."
+<action>{"type":"create_lead","lead_name":"Sarah Johnson","stage":"new_lead","notes":"Buyer, 3-bed in Winter Park, budget $450K"}</action>
 
-For updates include lead_id:
-<action>{"type":"update_lead","lead_id":"...","stage":"...","notes":"..."}</action>
+For updates:
+<action>{"type":"update_lead","lead_id":"<id>","stage":"contacted","notes":"updated notes"}</action>
 
-Keep responses to 1-3 sentences. Be direct.`
+If the agent says something with no client name at all, ask: "What's the client's name?"`
 
 export async function POST(req: Request) {
   try {
@@ -81,8 +85,11 @@ export async function POST(req: Request) {
             .select()
             .single()
 
-          if (!error && data) actionResult = { type: 'created', lead: data }
-          else if (error) console.error('[pipeline-chat] insert error:', error.message)
+          if (!error && data) {
+            actionResult = { type: 'created', lead: data }
+          } else if (error) {
+            console.error('[pipeline-chat] insert error:', error.message)
+          }
 
         } else if (action.type === 'update_lead' && action.lead_id) {
           const updates: Record<string, string> = { last_contact: new Date().toISOString() }
@@ -97,11 +104,15 @@ export async function POST(req: Request) {
             .select()
             .single()
 
-          if (!error && data) actionResult = { type: 'updated', lead: data }
+          if (!error && data) {
+            actionResult = { type: 'updated', lead: data }
+          }
         }
       } catch (e) {
         console.error('[pipeline-chat] action parse error:', e)
       }
+    } else {
+      console.log('[pipeline-chat] no action block in reply:', reply.slice(0, 200))
     }
 
     // Strip action block from reply shown to user
