@@ -75,10 +75,15 @@ async function runRule(
 // ─── HANDLER ─────────────────────────────────────────────────────────────────
 
 export async function GET(req: Request) {
-  // ── Cron safety — block manual calls in production ──────────────────────────
+  // ── Auth — allow API key OR Vercel cron in production ────────────────────────
+  const authHeader = req.headers.get('authorization')
   const isCron = req.headers.get('user-agent')?.includes('vercel-cron')
-  if (!isCron && process.env.NODE_ENV === 'production') {
-    logEvent('cron_blocked', { reason: 'non-cron caller in production' })
+
+  if (
+    authHeader !== `Bearer ${process.env.INTERNAL_API_KEY}` &&
+    !(isCron && process.env.NODE_ENV === 'production')
+  ) {
+    logEvent('cron_blocked', { reason: 'unauthorized' })
     return new Response('forbidden', { status: 403 })
   }
 
