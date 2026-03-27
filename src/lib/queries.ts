@@ -1,4 +1,4 @@
-import { getSupabase } from './getSupabase()'
+import { getSupabase } from './supabase'
 import type { Agent, Task, ActivityLog, Pipeline, ComplianceRecord } from '@/types'
 
 // ─── AGENT ────────────────────────────────────────────────────────────────────
