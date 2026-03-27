@@ -8,31 +8,42 @@ interface Props {
 }
 
 const STAGE_ORDER = [
-  'new_lead', 'contacted', 'appointment_set', 'under_contract', 'closed', 'stalled',
+  'new_lead',
+  'attempting_contact',
+  'contacted',
+  'appointment_set',
+  'active_client',
+  'under_contract',
+  'closed',
+  'stalled',
 ]
 
 const STAGE_LABEL: Record<string, string> = {
-  new_lead: 'New Lead',
-  contacted: 'Contacted',
-  appointment_set: 'Appointment Set',
-  under_contract: 'Under Contract',
-  closed: 'Closed',
-  stalled: 'Stalled',
+  new_lead:          'New Lead',
+  attempting_contact: 'Attempting Contact',
+  contacted:         'Contacted',
+  appointment_set:   'Appointment Set',
+  active_client:     'Active Client',
+  under_contract:    'Under Contract',
+  closed:            'Closed',
+  stalled:           'Stalled',
 }
 
 const STAGE_COLOR: Record<string, string> = {
-  new_lead: 'var(--bt-accent)',
-  contacted: '#6b9cf5',
-  appointment_set: '#a084e8',
-  under_contract: 'var(--bt-green)',
-  closed: 'var(--bt-green)',
-  stalled: 'var(--bt-red)',
+  new_lead:          'var(--bt-accent)',
+  attempting_contact: '#e0a040',
+  contacted:         '#6b9cf5',
+  appointment_set:   '#a084e8',
+  active_client:     '#4fbf8a',
+  under_contract:    'var(--bt-green)',
+  closed:            'var(--bt-green)',
+  stalled:           'var(--bt-red)',
 }
 
 const TYPE_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  buyer:   { bg: 'rgba(107,156,245,0.15)', color: '#6b9cf5', label: 'BUYER' },
-  seller:  { bg: 'rgba(160,132,232,0.15)', color: '#a084e8', label: 'SELLER' },
-  rental:  { bg: 'rgba(209,166,84,0.15)',  color: 'var(--bt-accent)', label: 'RENTAL' },
+  buyer:  { bg: 'rgba(107,156,245,0.15)', color: '#6b9cf5',           label: 'BUYER' },
+  seller: { bg: 'rgba(160,132,232,0.15)', color: '#a084e8',           label: 'SELLER' },
+  rental: { bg: 'rgba(209,166,84,0.15)',  color: 'var(--bt-accent)',  label: 'RENTAL' },
 }
 
 function daysSince(isoString: string): number {
@@ -40,7 +51,10 @@ function daysSince(isoString: string): number {
 }
 
 export default function PipelineBoard({ pipeline, onContact }: Props) {
-  const allStages = [...new Set([...STAGE_ORDER, ...pipeline.map((p) => p.stage)])]
+  // Always show all 8 stages in order, then any unknown legacy stages appended
+  const knownSet = new Set(STAGE_ORDER)
+  const legacyStages = [...new Set(pipeline.map((p) => p.stage))].filter((s) => !knownSet.has(s))
+  const allStages = [...STAGE_ORDER, ...legacyStages]
 
   return (
     <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6 }}>
@@ -79,13 +93,9 @@ export default function PipelineBoard({ pipeline, onContact }: Props) {
                           <div style={{ fontWeight: 500, fontSize: 13 }}>{lead.lead_name}</div>
                           {typeStyle && (
                             <span style={{
-                              fontSize: 9,
-                              fontWeight: 700,
-                              letterSpacing: '0.08em',
-                              padding: '2px 6px',
-                              borderRadius: 3,
-                              background: typeStyle.bg,
-                              color: typeStyle.color,
+                              fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
+                              padding: '2px 6px', borderRadius: 3,
+                              background: typeStyle.bg, color: typeStyle.color,
                             }}>
                               {typeStyle.label}
                             </span>
