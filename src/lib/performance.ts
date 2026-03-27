@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/getSupabase()'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -84,7 +84,7 @@ export async function updateEngagementScore(
   leadId: string,
   score: number
 ): Promise<void> {
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('pipeline')
     .update({
       engagement_score: score,
