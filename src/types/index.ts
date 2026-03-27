@@ -47,16 +47,17 @@ export interface Pipeline {
   agent_id: string
   lead_name: string
   stage: string
+  lead_type?: 'buyer' | 'seller' | 'rental'  // required for new leads
   last_contact: string              // ISO timestamp
   notes?: string
   created_at: string
-  scout_session_id?: string         // ties Scout conversation to this lead
-  scout_name?: string               // extracted from conversation
-  scout_email?: string              // extracted from conversation
-  scout_phone?: string              // extracted from conversation
-  scout_last_interaction?: string   // ISO timestamp of last Scout message
-  engagement_score?: number         // 0–100 Scout engagement score
-  last_engagement_update?: string   // ISO timestamp of last score update
+  scout_session_id?: string
+  scout_name?: string
+  scout_email?: string
+  scout_phone?: string
+  scout_last_interaction?: string
+  engagement_score?: number
+  last_engagement_update?: string
 }
 
 export interface ComplianceRecord {
