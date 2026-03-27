@@ -1,13 +1,12 @@
 'use client'
 
-import { useState } from 'react'
-import type { Task, ActivityLog } from '@/types'
-import { prioritizeTasks, createLogEntry, formatDate } from '@/lib/engine'
+import type { Task } from '@/types'
+import { prioritizeTasks, formatDate } from '@/lib/engine'
 
 interface Props {
   agentId: string
   tasks: Task[]
-  onUpdate: (tasks: Task[], log: ActivityLog) => void
+  onUpdate: (taskId: string, status: Task['status']) => Promise<void>
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -27,31 +26,8 @@ const TYPE_LABEL: Record<string, string> = {
   intervention: 'INTERVENTION',
 }
 
-export default function TaskList({ agentId, tasks, onUpdate }: Props) {
-  const [localTasks, setLocalTasks] = useState<Task[]>(tasks)
-  const sorted = prioritizeTasks(localTasks)
-
-  function markComplete(taskId: string) {
-    const updated = localTasks.map((t) =>
-      t.id === taskId
-        ? { ...t, status: 'completed' as const, completed_at: new Date().toISOString() }
-        : t
-    )
-    const task = localTasks.find((t) => t.id === taskId)!
-    const log = createLogEntry(agentId, 'task_completed', `Completed: ${task.title}`, 'success', taskId)
-    setLocalTasks(updated)
-    onUpdate(updated, log)
-  }
-
-  function markMissed(taskId: string) {
-    const updated = localTasks.map((t) =>
-      t.id === taskId ? { ...t, status: 'missed' as const } : t
-    )
-    const task = localTasks.find((t) => t.id === taskId)!
-    const log = createLogEntry(agentId, 'task_missed', `Missed: ${task.title}`, 'failure', taskId)
-    setLocalTasks(updated)
-    onUpdate(updated, log)
-  }
+export default function TaskList({ agentId: _agentId, tasks, onUpdate }: Props) {
+  const sorted = prioritizeTasks(tasks)
 
   return (
     <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6 }}>
@@ -60,11 +36,16 @@ export default function TaskList({ agentId, tasks, onUpdate }: Props) {
           Required Actions
         </div>
         <div style={{ fontSize: 11, color: 'var(--bt-text-dim)' }}>
-          {localTasks.filter((t) => t.status === 'completed').length}/{localTasks.length} completed
+          {tasks.filter((t) => t.status === 'completed').length}/{tasks.length} completed
         </div>
       </div>
 
       <div>
+        {sorted.length === 0 && (
+          <div style={{ padding: '24px 20px', fontSize: 13, color: 'var(--bt-text-dim)', textAlign: 'center' }}>
+            No tasks. Engine will generate tasks on next load.
+          </div>
+        )}
         {sorted.map((task, i) => (
           <div
             key={task.id}
@@ -77,7 +58,7 @@ export default function TaskList({ agentId, tasks, onUpdate }: Props) {
               opacity: task.status === 'missed' ? 0.5 : 1,
             }}
           >
-            {/* Status indicator */}
+            {/* Status dot */}
             <div style={{
               width: 8, height: 8, borderRadius: '50%', marginTop: 5, flexShrink: 0,
               background: STATUS_COLOR[task.status] ?? 'var(--bt-text-dim)',
@@ -102,15 +83,20 @@ export default function TaskList({ agentId, tasks, onUpdate }: Props) {
                   ✓ Completed {formatDate(task.completed_at)}
                 </div>
               )}
+              {(task.status === 'overdue' || task.status === 'pending') && (
+                <div style={{ fontSize: 11, color: task.status === 'overdue' ? 'var(--bt-red)' : 'var(--bt-text-dim)', marginTop: 4 }}>
+                  Due: {formatDate(task.due_date)}
+                </div>
+              )}
             </div>
 
             {/* Actions */}
             {(task.status === 'pending' || task.status === 'overdue') && (
               <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-                <button onClick={() => markComplete(task.id)} style={btnStyle('var(--bt-green)')}>
+                <button onClick={() => onUpdate(task.id, 'completed')} style={btnStyle('var(--bt-green)')}>
                   Done
                 </button>
-                <button onClick={() => markMissed(task.id)} style={btnStyle('var(--bt-red)')}>
+                <button onClick={() => onUpdate(task.id, 'missed')} style={btnStyle('var(--bt-red)')}>
                   Missed
                 </button>
               </div>
@@ -124,14 +110,8 @@ export default function TaskList({ agentId, tasks, onUpdate }: Props) {
 
 function btnStyle(color: string): React.CSSProperties {
   return {
-    padding: '4px 10px',
-    fontSize: 11,
-    fontWeight: 600,
-    border: `1px solid ${color}`,
-    background: 'transparent',
-    color,
-    borderRadius: 3,
-    cursor: 'pointer',
-    letterSpacing: '0.04em',
+    padding: '4px 10px', fontSize: 11, fontWeight: 600,
+    border: `1px solid ${color}`, background: 'transparent',
+    color, borderRadius: 3, cursor: 'pointer', letterSpacing: '0.04em',
   }
 }
