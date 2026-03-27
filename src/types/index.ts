@@ -1,46 +1,28 @@
-export type OnboardingStage = '0-30' | '30-60' | '60-90' | 'active'
-
-export type TaskStatus = 'pending' | 'completed' | 'missed' | 'overdue'
-
-export type TaskType =
-  | 'follow_up'
-  | 'lead_contact'
-  | 'pipeline_update'
-  | 'compliance'
-  | 'onboarding'
-  | 'recovery'
-  | 'intervention'
-
-export type ComplianceStatus = 'completed' | 'missing' | 'late'
-
-export type PipelineStage =
-  | 'new_lead'
-  | 'contacted'
-  | 'appointment_set'
-  | 'under_contract'
-  | 'closed'
-  | 'stalled'
+// ─── DB Row types (match Supabase column names exactly) ─────────────────────
 
 export interface Agent {
   id: string
   name: string
   email: string
-  onboarding_stage: OnboardingStage
-  onboarding_day: number // days since joining
-  last_active: string // ISO date string
-  performance_score: number // 0–100 placeholder
-  compliance_rate: number // 0–100 placeholder
+  phone?: string
+  stage: string               // existing column: 'Onboarding' | 'Active' etc
+  onboarding_stage: number    // days into onboarding (0–90+)
+  last_active: string         // ISO timestamp
+  start_date?: string
+  created_at: string
+  updated_at?: string
 }
 
 export interface Task {
   id: string
   agent_id: string
-  type: TaskType
+  type: string
   title: string
   description: string
-  status: TaskStatus
-  due_date: string // ISO date string
+  status: 'pending' | 'completed' | 'missed' | 'overdue'
+  due_date: string            // ISO timestamp
   completed_at?: string
+  created_at: string
 }
 
 export interface ActivityLog {
@@ -48,27 +30,33 @@ export interface ActivityLog {
   agent_id: string
   action_type: string
   description: string
-  timestamp: string // ISO date string
   outcome: 'success' | 'failure' | 'neutral'
   task_id?: string
+  created_at: string
 }
 
 export interface Pipeline {
   id: string
   agent_id: string
   lead_name: string
-  stage: PipelineStage
-  last_contact: string // ISO date string
+  stage: string
+  last_contact: string        // ISO timestamp
   notes?: string
-  days_in_stage: number
+  created_at: string
 }
 
 export interface ComplianceRecord {
   id: string
   agent_id: string
   requirement: string
-  status: ComplianceStatus
-  due_date: string
-  timestamp?: string // when completed
+  status: 'pending' | 'completed'
+  due_date?: string
+  completed_at?: string
   notes?: string
+  updated_at: string
 }
+
+// ─── UI helpers ──────────────────────────────────────────────────────────────
+
+export type TaskStatus = Task['status']
+export type TaskType = string
