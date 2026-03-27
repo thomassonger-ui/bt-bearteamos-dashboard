@@ -2,7 +2,8 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { openai } from '@ai-sdk/openai'
-import { generateText } from 'ai'
+import { generateText, generateObject } from 'ai'
+import { z } from 'zod'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -10,28 +11,15 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const SYSTEM_PROMPT = `You are a pipeline assistant for a real estate agent. Your ONLY job is to log client leads.
-
-RULES:
-1. The moment you have a client name, IMMEDIATELY create the lead — do not ask follow-up questions first.
-2. Always end your response with an <action> block when creating or updating a lead.
-3. Keep your text reply to 1 sentence max.
-4. Default stage is always "new_lead" unless the agent specifies otherwise.
-
-STAGE VALUES (use exactly): new_lead, contacted, appointment_set, under_contract, closed
-
-ACTION BLOCK FORMAT — always place at the very end of your response:
-<action>{"type":"create_lead","lead_name":"Full Name","stage":"new_lead","notes":"any details mentioned"}</action>
-
-EXAMPLE:
-Agent: "Sarah Johnson, buyer, looking for 3-bed in Winter Park, budget $450K"
-You: "Got it — Sarah Johnson added as a new buyer lead."
-<action>{"type":"create_lead","lead_name":"Sarah Johnson","stage":"new_lead","notes":"Buyer, 3-bed in Winter Park, budget $450K"}</action>
-
-For updates:
-<action>{"type":"update_lead","lead_id":"<id>","stage":"contacted","notes":"updated notes"}</action>
-
-If the agent says something with no client name at all, ask: "What's the client's name?"`
+// Schema for structured lead extraction
+const LeadSchema = z.object({
+  has_lead: z.boolean().describe('true if a client name was mentioned'),
+  reply: z.string().describe('1-sentence confirmation to show the agent'),
+  lead_name: z.string().optional().describe('Full name of the client'),
+  stage: z.enum(['new_lead', 'contacted', 'appointment_set', 'under_contract', 'closed']).optional(),
+  notes: z.string().optional().describe('Any details: area, budget, property type, timeline'),
+  update_lead_id: z.string().optional().describe('ID of existing lead to update instead of creating new'),
+})
 
 export async function POST(req: Request) {
   try {
@@ -50,75 +38,69 @@ export async function POST(req: Request) {
       .limit(20)
 
     const pipelineContext = pipeline?.length
-      ? `\nCurrent pipeline (${pipeline.length} leads):\n` +
-        pipeline.map((l: {id: string; lead_name: string; stage: string}) => `- ${l.lead_name} [${l.stage}] id:${l.id}`).join('\n')
-      : '\nNo leads in pipeline yet.'
+      ? `Current pipeline:\n` + pipeline.map((l: {id: string; lead_name: string; stage: string}) => `- ${l.lead_name} [${l.stage}] id:${l.id}`).join('\n')
+      : 'No leads yet.'
 
-    const systemWithContext = SYSTEM_PROMPT + pipelineContext
+    const lastMessage = messages[messages.length - 1]?.content ?? ''
 
-    const { text: reply } = await generateText({
+    // Use generateObject to force structured output — no parsing needed
+    const { object } = await generateObject({
       model: openai('gpt-4o-mini'),
-      messages: [
-        { role: 'system', content: systemWithContext },
-        ...messages,
-      ],
+      schema: LeadSchema,
+      prompt: `You are a pipeline assistant for a real estate agent.
+
+${pipelineContext}
+
+Agent said: "${lastMessage}"
+
+Instructions:
+- If agent mentions a client name, set has_lead=true and extract lead_name, stage (default: new_lead), notes
+- If agent wants to update an existing lead, set update_lead_id to the matching id from the pipeline list
+- Write a short 1-sentence reply confirming what you did
+- If no client info, set has_lead=false and reply asking for the client's name`,
     })
 
-    // Parse action block
-    const actionMatch = reply.match(/<action>([\s\S]*?)<\/action>/i)
     let actionResult = null
 
-    if (actionMatch) {
-      try {
-        const action = JSON.parse(actionMatch[1].trim())
+    if (object.has_lead && object.lead_name) {
+      if (object.update_lead_id) {
+        // Update existing lead
+        const updates: Record<string, string> = { last_contact: new Date().toISOString() }
+        if (object.stage) updates.stage = object.stage
+        if (object.notes) updates.notes = object.notes
 
-        if (action.type === 'create_lead' && action.lead_name) {
-          const { data, error } = await supabase
-            .from('pipeline')
-            .insert({
-              agent_id: agentId,
-              lead_name: action.lead_name,
-              stage: action.stage || 'new_lead',
-              notes: action.notes || '',
-              last_contact: new Date().toISOString(),
-            })
-            .select()
-            .single()
+        const { data, error } = await supabase
+          .from('pipeline')
+          .update(updates)
+          .eq('id', object.update_lead_id)
+          .eq('agent_id', agentId)
+          .select()
+          .single()
 
-          if (!error && data) {
-            actionResult = { type: 'created', lead: data }
-          } else if (error) {
-            console.error('[pipeline-chat] insert error:', error.message)
-          }
+        if (!error && data) actionResult = { type: 'updated', lead: data }
+        else console.error('[pipeline-chat] update error:', error?.message)
+      } else {
+        // Create new lead
+        const { data, error } = await supabase
+          .from('pipeline')
+          .insert({
+            agent_id: agentId,
+            lead_name: object.lead_name,
+            stage: object.stage || 'new_lead',
+            notes: object.notes || '',
+            last_contact: new Date().toISOString(),
+          })
+          .select()
+          .single()
 
-        } else if (action.type === 'update_lead' && action.lead_id) {
-          const updates: Record<string, string> = { last_contact: new Date().toISOString() }
-          if (action.stage) updates.stage = action.stage
-          if (action.notes) updates.notes = action.notes
-
-          const { data, error } = await supabase
-            .from('pipeline')
-            .update(updates)
-            .eq('id', action.lead_id)
-            .eq('agent_id', agentId)
-            .select()
-            .single()
-
-          if (!error && data) {
-            actionResult = { type: 'updated', lead: data }
-          }
-        }
-      } catch (e) {
-        console.error('[pipeline-chat] action parse error:', e)
+        if (!error && data) actionResult = { type: 'created', lead: data }
+        else console.error('[pipeline-chat] insert error:', error?.message)
       }
-    } else {
-      console.log('[pipeline-chat] no action block in reply:', reply.slice(0, 200))
     }
 
-    // Strip action block from reply shown to user
-    const cleanReply = reply.replace(/<action>[\s\S]*?<\/action>/gi, '').trim()
+    console.log('[pipeline-chat] has_lead:', object.has_lead, 'action:', actionResult?.type ?? 'none')
 
-    return NextResponse.json({ reply: cleanReply, action: actionResult })
+    return NextResponse.json({ reply: object.reply, action: actionResult })
   } catch (err) {
     console.error('[pipeline-chat]', err)
     return NextResponse.json({ error: 'internal_error' }, { status: 500 })
