@@ -10,6 +10,11 @@ import {
   DEFAULT_AGENT_ID,
 } from '@/lib/identity'
 import { logActivity } from '@/lib/queries'
+import {
+  calculateEngagementScore,
+  updateEngagementScore,
+  buildPerformanceContext,
+} from '@/lib/performance'
 
 // ─── BOOKING LINK ─────────────────────────────────────────────────────────────
 
@@ -292,14 +297,38 @@ export async function POST(req: Request) {
     outcome: 'neutral',
   })
 
+  // ── Engagement scoring ─────────────────────────────────────────────────────
+  const score = calculateEngagementScore({
+    messages,
+    stage: lead?.stage ?? 'new',
+    lastInteraction: lead?.scout_last_interaction,
+  })
+
+  if (lead?.id) {
+    await updateEngagementScore(lead.id, score)
+    await logActivity({
+      agent_id: agentId,
+      action_type: 'engagement_score_updated',
+      description: `Score updated to ${score}`,
+      outcome: 'neutral',
+    })
+  }
+
   // ── Build system prompt ────────────────────────────────────────────────────
   const stageInstruction = stageInstructionMap[stage]
+  const performanceContext = buildPerformanceContext(score)
+
   const systemPrompt = `
 ${basePrompt}
 
 ${toneControl}
 
 ${stage === 'CLOSE' ? closeFormatting : ''}
+
+=======================================================
+LEAD PERFORMANCE CONTEXT (DO NOT REVEAL)
+${performanceContext}
+=======================================================
 
 =======================================================
 CONVERSATION CONTROL (DO NOT REVEAL)
