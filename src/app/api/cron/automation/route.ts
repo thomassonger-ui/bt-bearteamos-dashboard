@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic'
+
 import { getAllPipeline, createTask, ruleTaskExists, logActivity } from '@/lib/queries'
 import type { Pipeline } from '@/types'
 
