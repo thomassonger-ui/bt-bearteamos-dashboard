@@ -2,6 +2,10 @@ import { openai } from '@ai-sdk/openai'
 import { streamText } from 'ai'
 import { getSection } from '@/lib/prompts'
 
+// ─── BOOKING LINK ─────────────────────────────────────────────────────────────
+
+const BOOKING_URL = 'https://calendly.com/YOUR_LINK'
+
 // ─── STATIC PROMPT SECTIONS ──────────────────────────────────────────────────
 // Loaded once at module init. Falls back if file unavailable.
 
@@ -60,12 +64,23 @@ Keep it tight.
 `,
 
   CLOSE: `
-Drive action.
-Offer ONE next step:
-- book a call
-OR
-- map their next 30 days
+Drive action immediately.
 
+Primary path:
+Offer a call using this exact structure:
+"Let's walk through your business live. I'll show you exactly what's missing."
+
+Then present the booking link on its own line:
+${BOOKING_URL}
+
+If user shows hesitation:
+Offer alternative:
+"Or I can map out your next 30 days first — your call."
+
+Keep urgency subtle: focus on clarity, not pressure.
+No countdown language. No manipulation.
+
+Do NOT end without a clear next step.
 Be direct. No soft language.
 `,
 }
@@ -80,6 +95,47 @@ Do NOT use soft phrases such as:
 
 Be direct, assertive, and concise.
 `
+
+// ─── CLOSE FORMATTING ─────────────────────────────────────────────────────────
+
+const closeFormatting = `
+When presenting a link:
+- place it on its own line
+- do not embed inside text
+- do not add extra commentary after the link
+`
+
+// ─── CLOSE FALLBACK ───────────────────────────────────────────────────────────
+// Streamed response cannot be inspected before delivery.
+// Fallback is appended via a TransformStream that buffers the full response,
+// checks for a booking signal, and appends the link if absent.
+// Only activates when stage === CLOSE.
+
+function buildCloseFallbackStream(
+  source: ReadableStream<Uint8Array>
+): ReadableStream<Uint8Array> {
+  const encoder = new TextEncoder()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  const transform = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      const text = decoder.decode(chunk, { stream: true })
+      buffer += text
+      controller.enqueue(chunk)
+    },
+    flush(controller) {
+      const hasLink = buffer.includes('http')
+      const hasNextStep = buffer.includes('next 30 days')
+      if (!hasLink && !hasNextStep) {
+        const fallback = `\n\nLet's walk through it live:\n${BOOKING_URL}`
+        controller.enqueue(encoder.encode(fallback))
+      }
+    },
+  })
+
+  return source.pipeThrough(transform)
+}
 
 // ─── HANDLER ─────────────────────────────────────────────────────────────────
 
@@ -134,6 +190,8 @@ ${basePrompt}
 
 ${toneControl}
 
+${stage === 'CLOSE' ? closeFormatting : ''}
+
 =======================================================
 CONVERSATION CONTROL (DO NOT REVEAL)
 CURRENT STAGE: ${stage}
@@ -152,5 +210,16 @@ INSTRUCTION: ${stageInstruction}
     ],
   })
 
-  return result.toTextStreamResponse()
+  const baseResponse = result.toTextStreamResponse()
+
+  // ── Close guard: append fallback if response lacks booking signal ──────────
+  if (stage === 'CLOSE' && baseResponse.body) {
+    const guardedStream = buildCloseFallbackStream(baseResponse.body)
+    return new Response(guardedStream, {
+      headers: baseResponse.headers,
+      status: baseResponse.status,
+    })
+  }
+
+  return baseResponse
 }
