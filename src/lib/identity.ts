@@ -36,7 +36,7 @@ export async function resolveLeadFromSession(sessionId: string): Promise<Pipelin
       last_contact: now,
       scout_session_id: sessionId,
       scout_last_interaction: now,
-    })
+    } as any)
     .select()
     .single()
 
