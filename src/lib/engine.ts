@@ -25,7 +25,7 @@ export async function runEngine(agentId: string): Promise<void> {
   await markOverdueTasks(agentId)
 
   const now = new Date()
-  const { getSupabase } = await import('./getSupabase()')
+  const { getSupabase } = await import('./supabase')
 
   // ── STREAK CALCULATION ────────────────────────────────────────────────────
   // Fetch current streak values from DB
