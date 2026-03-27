@@ -4,7 +4,7 @@ import { getSection } from '@/lib/prompts'
 
 // ─── BOOKING LINK ─────────────────────────────────────────────────────────────
 
-const BOOKING_URL = 'https://calendly.com/YOUR_LINK'
+const BOOKING_URL = 'https://calendly.com/thomas-songer/bear-team-meet'
 
 // ─── STATIC PROMPT SECTIONS ──────────────────────────────────────────────────
 // Loaded once at module init. Falls back if file unavailable.
