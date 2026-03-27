@@ -27,7 +27,7 @@ export async function saveMessage({
     session_id: sessionId,
     role,
     content,
-  })
+  } as any)
   if (error) console.error('[memory] saveMessage:', error.message)
 }
 
