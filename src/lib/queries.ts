@@ -168,3 +168,52 @@ export async function updateComplianceStatus(
     .eq('id', complianceId)
   if (error) console.error('updateComplianceStatus:', error.message)
 }
+
+// ─── BROKER QUERIES ───────────────────────────────────────────────────────────
+
+/** All agents — broker view */
+export async function getAllAgents(): Promise<Agent[]> {
+  const { data, error } = await supabase
+    .from('agents')
+    .select('*')
+    .order('created_at', { ascending: true })
+  if (error) { console.error('getAllAgents:', error.message); return [] }
+  return (data ?? []) as Agent[]
+}
+
+/** All tasks across all agents, or for a specific agent */
+export async function getAllTasks(agentId?: string): Promise<Task[]> {
+  let query = supabase.from('tasks').select('*')
+  if (agentId) query = query.eq('agent_id', agentId)
+  const { data, error } = await query.order('due_date', { ascending: true })
+  if (error) { console.error('getAllTasks:', error.message); return [] }
+  return (data ?? []) as Task[]
+}
+
+/** All compliance records across all agents, or for a specific agent */
+export async function getAllCompliance(agentId?: string): Promise<ComplianceRecord[]> {
+  let query = supabase.from('compliance').select('*')
+  if (agentId) query = query.eq('agent_id', agentId)
+  const { data, error } = await query.order('updated_at', { ascending: true })
+  if (error) { console.error('getAllCompliance:', error.message); return [] }
+  return (data ?? []) as ComplianceRecord[]
+}
+
+/** All pipeline records across all agents, or for a specific agent */
+export async function getAllPipeline(agentId?: string): Promise<Pipeline[]> {
+  let query = supabase.from('pipeline').select('*')
+  if (agentId) query = query.eq('agent_id', agentId)
+  const { data, error } = await query.order('last_contact', { ascending: true })
+  if (error) { console.error('getAllPipeline:', error.message); return [] }
+  return (data ?? []) as Pipeline[]
+}
+
+/** Reset all missed tasks for an agent back to pending */
+export async function resetMissedTasks(agentId: string): Promise<void> {
+  const { error } = await supabase
+    .from('tasks')
+    .update({ status: 'pending', completed_at: null })
+    .eq('agent_id', agentId)
+    .eq('status', 'missed')
+  if (error) console.error('resetMissedTasks:', error.message)
+}
