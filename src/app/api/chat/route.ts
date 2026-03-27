@@ -377,38 +377,44 @@ INSTRUCTION: ${stageInstruction}
     })
   }
 
-  // ── Stream response ────────────────────────────────────────────────────────
-  const result = await streamText({
-    model: openai('gpt-4o-mini'),
-    messages: messageStack,
-  })
+  // ── AI call + full text capture ────────────────────────────────────────────
+  let fullText: string
+  try {
+    const result = await streamText({
+      model: openai('gpt-4o-mini'),
+      messages: messageStack,
+    })
+    fullText = await result.text
+  } catch (err) {
+    logEvent('ai_failure', err)
+    return new Response(JSON.stringify({ error: 'ai_failure' }), { status: 500 })
+  }
 
-  const baseResponse = result.toTextStreamResponse()
-  if (!baseResponse.body) return baseResponse
-
-  // ── Wrap stream — capture assistant text + enforce CLOSE guard ─────────────
-  const saveAssistant = (fullText: string) => {
-    if (session_id && fullText) {
-      saveMessage({
-        agentId,
-        sessionId: session_id,
-        role: 'assistant',
-        content: fullText,
-      }).catch((err) => console.error('[memory] save assistant:', err))
+  // ── CLOSE guard — append booking link if missing ───────────────────────────
+  if (stage === 'CLOSE') {
+    const hasLink = fullText.includes('http')
+    const hasNextStep = fullText.includes('next 30 days')
+    if (!hasLink && !hasNextStep) {
+      fullText += `\n\nLet's walk through it live:\n${BOOKING_URL}`
     }
   }
 
-  const guardedStream =
-    stage === 'CLOSE'
-      ? buildCloseGuardStream(baseResponse.body, saveAssistant)
-      : buildCaptureStream(baseResponse.body, saveAssistant)
+  // ── Save assistant message to memory ──────────────────────────────────────
+  if (session_id && fullText) {
+    saveMessage({
+      agentId,
+      sessionId: session_id,
+      role: 'assistant',
+      content: fullText,
+    }).catch((err) => console.error('[memory] save assistant:', err))
+  }
 
   logEvent('scout_response', { session_id, stage, score })
 
-  return new Response(guardedStream, {
-    headers: baseResponse.headers,
-    status: baseResponse.status,
-  })
+  return new Response(
+    JSON.stringify({ reply: fullText }),
+    { headers: { 'Content-Type': 'application/json' } }
+  )
 
   } catch (err) {
     logEvent('api_error', err)
