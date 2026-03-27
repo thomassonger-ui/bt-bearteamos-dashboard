@@ -7,6 +7,7 @@ import {
   logActivity,
   updateAgentLastActive,
   updateAgentStreaks,
+  updateAgentScore,
   ruleTaskExists,
   countPendingOnboardingTasks,
   deduplicateTasks,
@@ -310,6 +311,51 @@ export async function runEngine(agentId: string): Promise<void> {
       })
     }
   }
+
+  // ── PERFORMANCE SCORING ───────────────────────────────────────────────────
+  // Score is calculated from last 24h of activity_log events.
+  // +10 per completed task, +5 per pipeline contact, +5 per compliance completion
+  // -10 per missed task, -20 flat if inactive ≥ 24h
+  // Clamped 0–100, written once per engine run.
+  const cutoff24h = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+
+  const { data: recentActivity } = await supabase
+    .from('activity_log')
+    .select('action_type')
+    .eq('agent_id', agentId)
+    .gte('created_at', cutoff24h)
+
+  const activityEvents = recentActivity ?? []
+
+  const completedCount = activityEvents.filter((e) => e.action_type === 'task_completed').length
+  const pipelineCount = activityEvents.filter((e) => e.action_type === 'pipeline_contact').length
+  const complianceCount = activityEvents.filter((e) => e.action_type === 'compliance_completed').length
+
+  // Count missed tasks created in last 24h for scoring
+  const { data: missedFor24h } = await supabase
+    .from('tasks')
+    .select('id')
+    .eq('agent_id', agentId)
+    .eq('status', 'missed')
+    .gte('created_at', cutoff24h)
+  const missedCount24h = missedFor24h?.length ?? 0
+
+  let rawScore = 0
+  rawScore += completedCount * 10
+  rawScore += pipelineCount * 5
+  rawScore += complianceCount * 5
+  rawScore -= missedCount24h * 10
+  if (hoursInactive >= 24) rawScore -= 20
+
+  const finalScore = Math.max(0, Math.min(100, rawScore))
+
+  await updateAgentScore(agentId, finalScore)
+  await logActivity({
+    agent_id: agentId,
+    action_type: 'score_updated',
+    description: `Performance score updated: ${finalScore}/100 (completed=${completedCount}, missed=${missedCount24h}, pipeline=${pipelineCount}, compliance=${complianceCount}, inactive=${hoursInactive >= 24})`,
+    outcome: finalScore >= 50 ? 'success' : 'neutral',
+  })
 
   // Final: update agent last_active timestamp
   await updateAgentLastActive(agentId)
