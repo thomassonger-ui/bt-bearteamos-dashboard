@@ -33,6 +33,21 @@ export async function updateAgentLastActive(agentId: string): Promise<void> {
 }
 
 /**
+ * Persist performance_score and last_score_update to DB.
+ * Called by engine once per run after score calculation.
+ */
+export async function updateAgentScore(
+  agentId: string,
+  score: number
+): Promise<void> {
+  const { error } = await supabase
+    .from('agents')
+    .update({ performance_score: score, last_score_update: new Date().toISOString() })
+    .eq('id', agentId)
+  if (error) console.error('updateAgentScore:', error.message)
+}
+
+/**
  * Persist inactivity_streak and missed_streak back to DB.
  * Called by engine after calculating streak values each run.
  */
