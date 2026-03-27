@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { Agent, Task, ActivityLog, Pipeline, ComplianceRecord } from '@/types'
 import { formatDate, relativeTime } from '@/lib/engine'
 import { createTask, updateComplianceStatus, resetMissedTasks } from '@/lib/queries'
+import { advanceStage, triggerFollowUp } from '@/lib/actions'
 
 interface Props {
   agent: Agent
@@ -28,6 +29,24 @@ export default function AgentDetailPanel({ agent, tasks, activityLog, pipeline, 
   const [forcing, setForcing] = useState(false)
   const [forceTitle, setForceTitle] = useState('')
   const [forceMsg, setForceMsg] = useState('')
+  const [leadActionMsg, setLeadActionMsg] = useState<Record<string, string>>({})
+
+  function flashLeadMsg(leadId: string, msg: string) {
+    setLeadActionMsg((prev) => ({ ...prev, [leadId]: msg }))
+    setTimeout(() => setLeadActionMsg((prev) => { const n = { ...prev }; delete n[leadId]; return n }), 3000)
+  }
+
+  async function handleAdvanceStage(leadId: string) {
+    await advanceStage(leadId, 'qualified')
+    flashLeadMsg(leadId, 'Marked qualified.')
+    await onRefresh()
+  }
+
+  async function handleTriggerFollowUp(leadId: string) {
+    await triggerFollowUp(leadId)
+    flashLeadMsg(leadId, 'Follow-up task created.')
+    await onRefresh()
+  }
 
   const activeTasks = tasks.filter((t) => t.status === 'pending' || t.status === 'overdue')
 
@@ -195,10 +214,11 @@ export default function AgentDetailPanel({ agent, tasks, activityLog, pipeline, 
             : pipeline.map((lead, i) => {
               const days = Math.floor((Date.now() - new Date(lead.last_contact).getTime()) / (1000 * 60 * 60 * 24))
               const stale = days >= 3
+              const msg = leadActionMsg[lead.id]
               return (
                 <Row key={lead.id} last={i === pipeline.length - 1}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div style={{ fontSize: 12, fontWeight: 500 }}>{lead.lead_name}</div>
                       <div style={{ fontSize: 11, color: stale ? 'var(--bt-red)' : 'var(--bt-text-dim)' }}>
                         {days === 0 ? 'Today' : `${days}d ago`}{stale ? ' ⚠' : ''}
@@ -206,6 +226,25 @@ export default function AgentDetailPanel({ agent, tasks, activityLog, pipeline, 
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginTop: 2 }}>
                       {lead.stage}{lead.notes ? ` · ${lead.notes}` : ''}
+                      {lead.engagement_score != null && (
+                        <span style={{ marginLeft: 8, color: 'var(--bt-accent)' }}>
+                          score: {lead.engagement_score}
+                        </span>
+                      )}
+                    </div>
+                    {msg && (
+                      <div style={{ fontSize: 11, color: 'var(--bt-green)', marginTop: 4 }}>{msg}</div>
+                    )}
+                    {/* Broker action buttons */}
+                    <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                      {lead.stage !== 'qualified' && (
+                        <button onClick={() => handleAdvanceStage(lead.id)} style={ctrlBtn('var(--bt-green)')}>
+                          Mark Qualified
+                        </button>
+                      )}
+                      <button onClick={() => handleTriggerFollowUp(lead.id)} style={ctrlBtn('var(--bt-accent)')}>
+                        Trigger Follow-Up
+                      </button>
                     </div>
                   </div>
                 </Row>
