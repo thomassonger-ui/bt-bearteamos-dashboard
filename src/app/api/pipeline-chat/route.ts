@@ -8,8 +8,11 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const VALID_STAGES = ['new_lead','contacted','appointment_set','under_contract','closed']
-const VALID_TYPES  = ['buyer','seller','rental']
+const VALID_STAGES = [
+  'new_lead', 'attempting_contact', 'contacted', 'appointment_set',
+  'active_client', 'under_contract', 'closed', 'stalled',
+]
+const VALID_TYPES = ['buyer', 'seller', 'rental']
 
 export async function POST(req: Request) {
   try {
@@ -26,7 +29,7 @@ export async function POST(req: Request) {
       .limit(20)
 
     const pipelineList = pipeline?.length
-      ? pipeline.map((l: {id: string; lead_name: string; stage: string; lead_type?: string}) =>
+      ? pipeline.map((l: { id: string; lead_name: string; stage: string; lead_type?: string }) =>
           `- ${l.lead_name} [${l.stage}${l.lead_type ? `, ${l.lead_type}` : ''}] id:${l.id}`
         ).join('\n')
       : 'None yet.'
@@ -45,10 +48,12 @@ export async function POST(req: Request) {
         messages: [
           {
             role: 'system',
-            content: `You are a real estate pipeline assistant for a busy agent. Extract client actions and return JSON only.
+            content: `You are a real estate pipeline assistant. Extract client actions and return JSON only.
 
 Current pipeline:
 ${pipelineList}
+
+Valid stages (in order): new_lead, attempting_contact, contacted, appointment_set, active_client, under_contract, closed, stalled
 
 Return this exact JSON structure:
 {
@@ -56,36 +61,40 @@ Return this exact JSON structure:
   "reply": "one sentence response",
   "lead_name": "Full Name or null",
   "lead_type": "buyer|seller|rental or null",
-  "stage": "new_lead|contacted|appointment_set|under_contract|closed or null",
+  "stage": "one of the valid stages above, or null",
   "notes": "any details or null",
   "target_lead_id": "existing lead id if updating or deleting, otherwise null"
 }
 
 Lead type rules (CRITICAL):
 - Every new lead MUST have a lead_type: buyer, seller, or rental
-- If a name is given but no type is mentioned and it's a new lead → set action_type="ask_type" and reply asking "Is [name] a buyer, seller, or rental lead?"
-- If the message contains words like "buyer", "buying", "looking to buy", "wants to buy" → lead_type = "buyer"
-- If it contains "seller", "selling", "listing", "wants to sell" → lead_type = "seller"
-- If it contains "rental", "renting", "tenant", "looking to rent" → lead_type = "rental"
+- If a name is given but no type is mentioned for a new lead → set action_type="ask_type", reply asking "Is [name] a buyer, seller, or rental lead?"
+- "buyer", "buying", "looking to buy", "wants to buy" → lead_type = "buyer"
+- "seller", "selling", "listing", "wants to sell" → lead_type = "seller"
+- "rental", "renting", "tenant", "looking to rent" → lead_type = "rental"
 
 Stage mapping rules:
+- "new lead", "just got a lead", "intake" → stage = "new_lead"
+- "trying to reach", "attempting contact", "can't get through", "no answer", "left voicemail" → stage = "attempting_contact"
+- "called", "texted", "reached out", "sent email", "followed up", "got a response", "two-way", "met with", "spoke with" → stage = "contacted"
 - "set appointment", "scheduled a showing", "meeting set", "appointment for" → stage = "appointment_set", notes = date/time
-- "called", "texted", "reached out", "sent email", "followed up" → stage = "contacted"
-- "under contract", "in contract", "signed" → stage = "under_contract"
-- "closed", "closing", "settlement" → stage = "closed"
+- "working with", "active buyer", "active seller", "buyer active", "seller active", "actively looking", "in search mode", "touring homes" → stage = "active_client"
+- "under contract", "in contract", "signed", "went under contract" → stage = "under_contract"
+- "closed", "closing", "settlement", "funded" → stage = "closed"
+- "stalled", "cold", "no response", "went dark", "ghosting", "paused", "follow up later" → stage = "stalled"
 - new name with no other context → stage = "new_lead"
 
 Action type rules:
 - action_type = "delete_lead" if user says remove/delete/take off a client
-- action_type = "update_lead" if updating an existing client already in the pipeline list (appointments count as updates)
+- action_type = "update_lead" if updating an existing client in the pipeline (use target_lead_id)
 - action_type = "create_lead" if adding a brand new client with a known lead_type
-- action_type = "ask_type" if name is given but lead_type is unknown for a new lead
-- action_type = "none" only if there is truly no client action at all
+- action_type = "ask_type" if name given but lead_type unknown for a new lead
+- action_type = "none" only if truly no client action at all
 
-For delete: match the name in the pipeline list to get target_lead_id.
-reply must be one sentence confirming what was done or asking the clarifying question.`
+For delete: match name in pipeline list to get target_lead_id.
+reply must confirm what was done in 1 sentence, including the stage.`,
           },
-          { role: 'user', content: lastMessage }
+          { role: 'user', content: lastMessage },
         ],
       }),
     })
@@ -121,8 +130,10 @@ reply must be one sentence confirming what was done or asking the clarifying que
     let actionResult = null
 
     if (extracted.action_type === 'ask_type') {
-      // Just return the clarifying question — no DB action
-      return NextResponse.json({ reply: extracted.reply ?? `Is ${extracted.lead_name} a buyer, seller, or rental lead?`, action: null })
+      return NextResponse.json({
+        reply: extracted.reply ?? `Is ${extracted.lead_name} a buyer, seller, or rental lead?`,
+        action: null,
+      })
     }
 
     if (extracted.action_type === 'delete_lead' && extracted.target_lead_id) {
@@ -131,7 +142,6 @@ reply must be one sentence confirming what was done or asking the clarifying que
         .delete()
         .eq('id', extracted.target_lead_id)
         .eq('agent_id', agentId)
-
       if (!error) {
         actionResult = { type: 'deleted', lead_id: extracted.target_lead_id, lead_name: extracted.lead_name }
         console.log('[pipeline-chat] deleted lead:', extracted.lead_name)
@@ -152,7 +162,6 @@ reply must be one sentence confirming what was done or asking the clarifying que
         .eq('agent_id', agentId)
         .select()
         .single()
-
       if (!error && data) actionResult = { type: 'updated', lead: data }
       else console.error('[pipeline-chat] update error:', error?.message)
     } else if (extracted.action_type === 'create_lead' && extracted.lead_name) {
@@ -171,10 +180,9 @@ reply must be one sentence confirming what was done or asking the clarifying que
         })
         .select()
         .single()
-
       if (!error && data) {
         actionResult = { type: 'created', lead: data }
-        console.log('[pipeline-chat] created lead:', extracted.lead_name, lead_type)
+        console.log('[pipeline-chat] created lead:', extracted.lead_name, stage, lead_type)
       } else {
         console.error('[pipeline-chat] insert error:', error?.message)
       }
