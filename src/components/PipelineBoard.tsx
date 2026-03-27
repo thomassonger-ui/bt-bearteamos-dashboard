@@ -29,12 +29,17 @@ const STAGE_COLOR: Record<string, string> = {
   stalled: 'var(--bt-red)',
 }
 
+const TYPE_STYLE: Record<string, { bg: string; color: string; label: string }> = {
+  buyer:   { bg: 'rgba(107,156,245,0.15)', color: '#6b9cf5', label: 'BUYER' },
+  seller:  { bg: 'rgba(160,132,232,0.15)', color: '#a084e8', label: 'SELLER' },
+  rental:  { bg: 'rgba(209,166,84,0.15)',  color: 'var(--bt-accent)', label: 'RENTAL' },
+}
+
 function daysSince(isoString: string): number {
   return Math.floor((Date.now() - new Date(isoString).getTime()) / (1000 * 60 * 60 * 24))
 }
 
 export default function PipelineBoard({ pipeline, onContact }: Props) {
-  // Group by stage — also include any stages in data not in STAGE_ORDER
   const allStages = [...new Set([...STAGE_ORDER, ...pipeline.map((p) => p.stage)])]
 
   return (
@@ -63,13 +68,29 @@ export default function PipelineBoard({ pipeline, onContact }: Props) {
                 leads.map((lead) => {
                   const days = daysSince(lead.last_contact)
                   const stale = days >= 3
+                  const typeStyle = lead.lead_type ? TYPE_STYLE[lead.lead_type] : null
                   return (
                     <div key={lead.id} style={{
                       padding: '10px 14px', background: 'var(--bt-muted)', borderRadius: 4, marginBottom: 6,
                       border: stale ? '1px solid rgba(224,82,82,0.3)' : '1px solid transparent',
                     }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div style={{ fontWeight: 500, fontSize: 13 }}>{lead.lead_name}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                          <div style={{ fontWeight: 500, fontSize: 13 }}>{lead.lead_name}</div>
+                          {typeStyle && (
+                            <span style={{
+                              fontSize: 9,
+                              fontWeight: 700,
+                              letterSpacing: '0.08em',
+                              padding: '2px 6px',
+                              borderRadius: 3,
+                              background: typeStyle.bg,
+                              color: typeStyle.color,
+                            }}>
+                              {typeStyle.label}
+                            </span>
+                          )}
+                        </div>
                         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                           <div style={{ fontSize: 11, color: stale ? 'var(--bt-red)' : 'var(--bt-text-dim)' }}>
                             {days === 0 ? 'Today' : `${days}d ago`}
