@@ -23,6 +23,13 @@ interface Props {
 
 const h24 = 24 * 60 * 60 * 1000
 
+function scoreTier(score: number): { label: string; color: string } {
+  if (score >= 80) return { label: 'High Performer', color: 'var(--bt-green)' }
+  if (score >= 50) return { label: 'Active',         color: 'var(--bt-accent)' }
+  if (score >= 1)  return { label: 'At Risk',        color: 'var(--bt-yellow)' }
+  return               { label: 'Inactive',          color: 'var(--bt-text-dim)' }
+}
+
 export default function AgentTable({ agents, tasks, compliance, selectedAgentId, onSelect }: Props) {
   const now = Date.now()
 
@@ -44,17 +51,21 @@ export default function AgentTable({ agents, tasks, compliance, selectedAgentId,
     }
   })
 
+  // Sort by performance_score DESC
+  rows.sort((a, b) => (b.agent.performance_score ?? 0) - (a.agent.performance_score ?? 0))
+
   return (
     <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6 }}>
       {/* Header */}
       <div style={{
-        display: 'grid', gridTemplateColumns: '2fr 80px 100px 80px 80px 80px 80px',
+        display: 'grid', gridTemplateColumns: '2fr 80px 100px 70px 80px 80px 80px 80px',
         padding: '10px 16px', borderBottom: '1px solid var(--bt-border)',
         fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase',
       }}>
         <div>Agent</div>
         <div>Stage</div>
         <div>Last Active</div>
+        <div style={{ textAlign: 'center' }}>Score</div>
         <div style={{ textAlign: 'center' }}>Tasks</div>
         <div style={{ textAlign: 'center' }}>Overdue</div>
         <div style={{ textAlign: 'center' }}>Missed</div>
@@ -79,12 +90,15 @@ export default function AgentTable({ agents, tasks, compliance, selectedAgentId,
           ? '2px solid var(--bt-yellow)'
           : '2px solid transparent'
 
+        const score = row.agent.performance_score ?? 0
+        const tier = scoreTier(score)
+
         return (
           <div
             key={row.agent.id}
             onClick={() => onSelect(row.agent.id)}
             style={{
-              display: 'grid', gridTemplateColumns: '2fr 80px 100px 80px 80px 80px 80px',
+              display: 'grid', gridTemplateColumns: '2fr 80px 100px 70px 80px 80px 80px 80px',
               padding: '12px 16px', borderBottom: '1px solid var(--bt-border)',
               cursor: 'pointer', background: rowBg, borderLeft,
               alignItems: 'center',
@@ -115,6 +129,12 @@ export default function AgentTable({ agents, tasks, compliance, selectedAgentId,
             {/* Last active */}
             <div style={{ fontSize: 12, color: row.inactive ? 'var(--bt-yellow)' : 'var(--bt-text-dim)' }}>
               {row.agent.last_active ? relativeTime(row.agent.last_active) : 'Never'}
+            </div>
+
+            {/* Score */}
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: tier.color }}>{score}</div>
+              <div style={{ fontSize: 9, color: tier.color, letterSpacing: '0.04em', textTransform: 'uppercase', marginTop: 1 }}>{tier.label}</div>
             </div>
 
             {/* Counts */}
