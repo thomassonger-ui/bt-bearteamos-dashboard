@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { getSupabase } from './getSupabase()'
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 
@@ -22,7 +22,7 @@ export async function saveMessage({
   role: 'user' | 'assistant'
   content: string
 }): Promise<void> {
-  const { error } = await supabase.from('scout_memory').insert({
+  const { error } = await getSupabase().from('scout_memory').insert({
     agent_id: agentId ?? null,
     session_id: sessionId,
     role,
@@ -39,7 +39,7 @@ export async function getRecentMessages(
   sessionId: string,
   limit = 10
 ): Promise<MemoryMessage[]> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('scout_memory')
     .select('role, content')
     .eq('session_id', sessionId)
