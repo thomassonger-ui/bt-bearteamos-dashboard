@@ -7,6 +7,7 @@ import { runEngine } from '@/lib/engine'
 import { logActivity } from '@/lib/queries'
 
 export default function LoginPage() {
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -14,7 +15,7 @@ export default function LoginPage() {
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    if (!password.trim()) { setError('Password is required.'); return }
+    if (!username.trim() || !password.trim()) { setError('Username and password are required.'); return }
     setLoading(true)
     setError('')
 
@@ -23,7 +24,7 @@ export default function LoginPage() {
       const authRes = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
       })
 
       if (!authRes.ok) {
@@ -81,6 +82,25 @@ export default function LoginPage() {
         <form onSubmit={handleLogin}>
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: 'block', fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
+              Username
+            </label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Username"
+              autoFocus
+              style={{
+                width: '100%', padding: '10px 12px', fontSize: 14,
+                background: 'var(--bt-muted)', border: '1px solid var(--bt-border)',
+                borderRadius: 4, color: 'var(--bt-text)', outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ display: 'block', fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
               Password
             </label>
             <input
@@ -88,7 +108,6 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter password"
-              autoFocus
               style={{
                 width: '100%', padding: '10px 12px', fontSize: 14,
                 background: 'var(--bt-muted)', border: '1px solid var(--bt-border)',
