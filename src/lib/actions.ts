@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/getSupabase()'
 import { logActivity } from '@/lib/queries'
 
 // ─── FORCE TASK ───────────────────────────────────────────────────────────────
@@ -6,7 +6,7 @@ import { logActivity } from '@/lib/queries'
 
 export async function forceTask(leadId: string, title: string): Promise<void> {
   // Resolve agent_id from pipeline row
-  const { data: lead, error: leadErr } = await supabase
+  const { data: lead, error: leadErr } = await getSupabase()
     .from('pipeline')
     .select('agent_id')
     .eq('id', leadId)
@@ -19,7 +19,7 @@ export async function forceTask(leadId: string, title: string): Promise<void> {
 
   const due = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
-  const { error } = await supabase.from('tasks').insert({
+  const { error } = await getSupabase().from('tasks').insert({
     agent_id: lead.agent_id,
     type: 'intervention',
     title,
@@ -41,7 +41,7 @@ export async function forceTask(leadId: string, title: string): Promise<void> {
 // Update the pipeline stage for a lead and log the broker action.
 
 export async function advanceStage(leadId: string, stage: string): Promise<void> {
-  const { data: lead, error: leadErr } = await supabase
+  const { data: lead, error: leadErr } = await getSupabase()
     .from('pipeline')
     .select('agent_id')
     .eq('id', leadId)
@@ -52,7 +52,7 @@ export async function advanceStage(leadId: string, stage: string): Promise<void>
     return
   }
 
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('pipeline')
     .update({ stage, last_contact: new Date().toISOString() })
     .eq('id', leadId)
@@ -69,7 +69,7 @@ export async function advanceStage(leadId: string, stage: string): Promise<void>
 // Insert an immediate follow-up task for the agent who owns this lead.
 
 export async function triggerFollowUp(leadId: string): Promise<void> {
-  const { data: lead, error: leadErr } = await supabase
+  const { data: lead, error: leadErr } = await getSupabase()
     .from('pipeline')
     .select('agent_id, lead_name')
     .eq('id', leadId)
@@ -82,7 +82,7 @@ export async function triggerFollowUp(leadId: string): Promise<void> {
 
   const due = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
 
-  const { error } = await supabase.from('tasks').insert({
+  const { error } = await getSupabase().from('tasks').insert({
     agent_id: lead.agent_id,
     type: 'intervention',
     title: `Follow up immediately — broker triggered`,
