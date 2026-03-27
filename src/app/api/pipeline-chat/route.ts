@@ -58,7 +58,6 @@ export async function POST(req: Request) {
         { role: 'system', content: systemWithContext },
         ...messages,
       ],
-      maxTokens: 300,
     })
 
     // Parse action block
