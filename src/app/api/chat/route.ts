@@ -211,6 +211,14 @@ export async function POST(req: Request) {
   const body = await req.json()
   const { messages, session_id, agent_id } = body
 
+  // ── Validate messages ──────────────────────────────────────────────────────
+  if (!Array.isArray(messages) || messages.length === 0) {
+    return new Response(
+      JSON.stringify({ error: 'bad_request' }),
+      { status: 400 }
+    )
+  }
+
   // ── Resolve lead from session ──────────────────────────────────────────────
   // Looks up or creates a pipeline row bound to this session_id.
   const lead = session_id
