@@ -13,6 +13,8 @@ import {
   getAllPipeline,
   getActivityLog,
 } from '@/lib/queries'
+import { rankLeads, generateAlerts } from '@/lib/intelligence'
+import type { RankedLead, LeadAlert } from '@/lib/intelligence'
 import type { Agent, Task, ComplianceRecord, Pipeline, ActivityLog } from '@/types'
 
 export default function BrokerPage() {
@@ -20,6 +22,8 @@ export default function BrokerPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [compliance, setCompliance] = useState<ComplianceRecord[]>([])
   const [pipeline, setPipeline] = useState<Pipeline[]>([])
+  const [rankedLeads, setRankedLeads] = useState<RankedLead[]>([])
+  const [alerts, setAlerts] = useState<LeadAlert[]>([])
   const [loading, setLoading] = useState(true)
 
   // Detail panel state
@@ -40,6 +44,8 @@ export default function BrokerPage() {
     setTasks(t)
     setCompliance(c)
     setPipeline(p)
+    setRankedLeads(rankLeads(p))
+    setAlerts(generateAlerts(p))
     setLoading(false)
   }, [])
 
@@ -107,6 +113,47 @@ export default function BrokerPage() {
 
       {/* Main content */}
       <div style={{ padding: '24px 28px', maxWidth: 1400, margin: '0 auto' }}>
+
+        {/* Scout Lead Intelligence Alerts */}
+        {alerts.length > 0 && (
+          <div style={{ marginBottom: 20, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '14px 18px' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>
+              Scout Lead Alerts — {alerts.length} active
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {alerts.map((alert) => {
+                const colors: Record<string, string> = {
+                  high: '#ef4444',
+                  stale: '#f59e0b',
+                  low: '#3b82f6',
+                }
+                const icons: Record<string, string> = { high: '🔴', stale: '🟡', low: '🔵' }
+                return (
+                  <div
+                    key={`${alert.type}-${alert.leadId}`}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      fontSize: 12, color: 'var(--bt-text)',
+                      padding: '6px 10px', borderRadius: 4,
+                      borderLeft: `3px solid ${colors[alert.type]}`,
+                      background: 'var(--bt-black)',
+                    }}
+                  >
+                    <span>{icons[alert.type]}</span>
+                    <span style={{ fontWeight: 600, color: colors[alert.type], textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.06em' }}>
+                      {alert.type}
+                    </span>
+                    <span style={{ color: 'var(--bt-text-dim)' }}>—</span>
+                    <span>{alert.message}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 10, color: 'var(--bt-text-dim)', fontFamily: 'monospace' }}>
+                      {alert.leadId.slice(0, 8)}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Performance summary */}
         <div style={{ marginBottom: 20 }}>
