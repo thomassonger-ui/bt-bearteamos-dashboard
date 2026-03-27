@@ -24,6 +24,10 @@ export default function PipelinePage() {
   const [chatLoading, setChatLoading] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
+  // Voice state
+  const [listening, setListening] = useState(false)
+  const recognitionRef = useRef<SpeechRecognition | null>(null)
+
   useEffect(() => {
     async function load() {
       const storedId = sessionStorage.getItem('bt_agent_id')
@@ -54,9 +58,10 @@ export default function PipelinePage() {
     }
   }
 
-  async function sendMessage() {
-    if (!input.trim() || !agent || chatLoading) return
-    const userMsg: ChatMessage = { role: 'user', content: input.trim() }
+  async function sendMessage(overrideText?: string) {
+    const text = overrideText ?? input.trim()
+    if (!text || !agent || chatLoading) return
+    const userMsg: ChatMessage = { role: 'user', content: text }
     const newMessages = [...messages, userMsg]
     setMessages(newMessages)
     setInput('')
@@ -73,10 +78,7 @@ export default function PipelinePage() {
       })
       const data = await res.json()
       const reply = data.reply || 'Got it.'
-
       setMessages(prev => [...prev, { role: 'assistant', content: reply }])
-
-      // If a lead was created/updated, refresh pipeline
       if (data.action) {
         const fresh = await getPipeline(agent.id)
         setPipeline(fresh)
@@ -86,6 +88,43 @@ export default function PipelinePage() {
     } finally {
       setChatLoading(false)
     }
+  }
+
+  function toggleVoice() {
+    if (typeof window === 'undefined') return
+
+    const SpeechRecognition =
+      (window as Window & { SpeechRecognition?: typeof window.SpeechRecognition; webkitSpeechRecognition?: typeof window.SpeechRecognition }).SpeechRecognition ||
+      (window as Window & { SpeechRecognition?: typeof window.SpeechRecognition; webkitSpeechRecognition?: typeof window.SpeechRecognition }).webkitSpeechRecognition
+
+    if (!SpeechRecognition) {
+      alert('Voice input is not supported in this browser. Try Chrome.')
+      return
+    }
+
+    if (listening) {
+      recognitionRef.current?.stop()
+      setListening(false)
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = 'en-US'
+    recognition.continuous = false
+    recognition.interimResults = false
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      const transcript = event.results[0][0].transcript
+      setListening(false)
+      sendMessage(transcript)
+    }
+
+    recognition.onerror = () => setListening(false)
+    recognition.onend = () => setListening(false)
+
+    recognitionRef.current = recognition
+    recognition.start()
+    setListening(true)
   }
 
   const stalled = pipeline.filter((p) => {
@@ -130,7 +169,6 @@ export default function PipelinePage() {
 
           {/* Split layout: pipeline board + chat */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20, alignItems: 'start' }}>
-            {/* Pipeline board */}
             <div>
               <PipelineBoard pipeline={pipeline} onContact={handleContact} />
             </div>
@@ -146,7 +184,7 @@ export default function PipelinePage() {
               position: 'sticky',
               top: 24,
             }}>
-              {/* Chat header */}
+              {/* Header */}
               <div style={{
                 padding: '12px 16px',
                 borderBottom: '1px solid var(--bt-border)',
@@ -162,10 +200,7 @@ export default function PipelinePage() {
               {/* Messages */}
               <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {messages.map((msg, i) => (
-                  <div key={i} style={{
-                    alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                    maxWidth: '88%',
-                  }}>
+                  <div key={i} style={{ alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '88%' }}>
                     <div style={{
                       padding: '8px 12px',
                       borderRadius: msg.role === 'user' ? '12px 12px 2px 12px' : '12px 12px 12px 2px',
@@ -180,49 +215,73 @@ export default function PipelinePage() {
                 ))}
                 {chatLoading && (
                   <div style={{ alignSelf: 'flex-start' }}>
-                    <div style={{ padding: '8px 12px', borderRadius: '12px 12px 12px 2px', background: 'var(--bt-muted)', fontSize: 13, color: 'var(--bt-text-dim)' }}>
-                      …
-                    </div>
+                    <div style={{ padding: '8px 12px', borderRadius: '12px 12px 12px 2px', background: 'var(--bt-muted)', fontSize: 13, color: 'var(--bt-text-dim)' }}>…</div>
                   </div>
                 )}
                 <div ref={chatEndRef} />
               </div>
 
-              {/* Input */}
-              <div style={{ padding: '10px 12px', borderTop: '1px solid var(--bt-border)', display: 'flex', gap: 8 }}>
-                <input
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                  placeholder="e.g. New buyer, Sarah Johnson, Winter Park..."
-                  disabled={chatLoading}
-                  style={{
-                    flex: 1,
-                    padding: '8px 12px',
-                    background: 'var(--bt-muted)',
-                    border: '1px solid var(--bt-border)',
-                    borderRadius: 6,
-                    color: 'var(--bt-text)',
-                    fontSize: 13,
-                    outline: 'none',
-                  }}
-                />
-                <button
-                  onClick={sendMessage}
-                  disabled={chatLoading || !input.trim()}
-                  style={{
-                    padding: '8px 14px',
-                    background: chatLoading || !input.trim() ? 'var(--bt-muted)' : 'var(--bt-accent)',
-                    color: 'var(--bt-black)',
-                    border: 'none',
-                    borderRadius: 6,
-                    fontSize: 13,
-                    fontWeight: 700,
-                    cursor: chatLoading || !input.trim() ? 'not-allowed' : 'pointer',
-                  }}
-                >
-                  →
-                </button>
+              {/* Input area */}
+              <div style={{ padding: '10px 12px', borderTop: '1px solid var(--bt-border)' }}>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                  <input
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+                    placeholder="e.g. New buyer, Sarah Johnson…"
+                    disabled={chatLoading || listening}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      background: 'var(--bt-muted)',
+                      border: '1px solid var(--bt-border)',
+                      borderRadius: 6,
+                      color: 'var(--bt-text)',
+                      fontSize: 13,
+                      outline: 'none',
+                    }}
+                  />
+                  {/* Mic button */}
+                  <button
+                    onClick={toggleVoice}
+                    title={listening ? 'Stop listening' : 'Speak a client'}
+                    style={{
+                      padding: '8px 10px',
+                      background: listening ? 'rgba(224,82,82,0.15)' : 'var(--bt-muted)',
+                      border: `1px solid ${listening ? 'var(--bt-red)' : 'var(--bt-border)'}`,
+                      borderRadius: 6,
+                      color: listening ? 'var(--bt-red)' : 'var(--bt-text-dim)',
+                      fontSize: 15,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {listening ? '⏹' : '🎤'}
+                  </button>
+                  {/* Send button */}
+                  <button
+                    onClick={() => sendMessage()}
+                    disabled={chatLoading || !input.trim() || listening}
+                    style={{
+                      padding: '8px 14px',
+                      background: chatLoading || !input.trim() || listening ? 'var(--bt-muted)' : 'var(--bt-accent)',
+                      color: 'var(--bt-black)',
+                      border: 'none',
+                      borderRadius: 6,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: chatLoading || !input.trim() || listening ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    →
+                  </button>
+                </div>
+                {/* Instructions */}
+                <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', lineHeight: 1.5 }}>
+                  {listening
+                    ? '🔴 Listening… speak now, then press ⏹ to stop'
+                    : 'Type or tap 🎤 to speak. Say the client\'s name, stage, and any notes. The AI will save them to your pipeline.'}
+                </div>
               </div>
             </div>
           </div>
