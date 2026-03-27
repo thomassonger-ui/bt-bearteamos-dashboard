@@ -61,6 +61,28 @@ export default function AgentDetailPanel({ agent, tasks, activityLog, pipeline, 
 
   const missedCount = tasks.filter((t) => t.status === 'missed').length
 
+  // ── Coaching signals — static rule-based ─────────────────────────────────
+  const score = agent.performance_score ?? 0
+  const missedStreak = agent.missed_streak ?? 0
+  const staleLeads = pipeline.filter((p) => {
+    const days = (Date.now() - new Date(p.last_contact).getTime()) / (1000 * 60 * 60 * 24)
+    return days >= 3 && p.stage !== 'closed'
+  })
+
+  const coachingSignals: string[] = []
+  if (score >= 80) {
+    coachingSignals.push('Strong execution — maintain consistency.')
+  }
+  if (score < 50) {
+    coachingSignals.push('Increase daily activity — focus on completing tasks.')
+  }
+  if (missedStreak >= 2) {
+    coachingSignals.push('You are missing tasks — prioritize completion before new work.')
+  }
+  if (staleLeads.length > 0) {
+    coachingSignals.push('Follow up with stalled leads to improve conversion.')
+  }
+
   return (
     <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6 }}>
       {/* Agent header */}
@@ -69,7 +91,7 @@ export default function AgentDetailPanel({ agent, tasks, activityLog, pipeline, 
           <div>
             <div style={{ fontSize: 15, fontWeight: 600 }}>{agent.name}</div>
             <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginTop: 2 }}>
-              {agent.email} · Day {agent.onboarding_stage ?? 0} · Last active: {agent.last_active ? relativeTime(agent.last_active) : 'Never'}
+              {agent.email} · Day {agent.onboarding_stage ?? 0} · Last active: {agent.last_active ? relativeTime(agent.last_active) : 'Never'} · Score: {score}/100
             </div>
           </div>
           {/* Control actions */}
@@ -100,6 +122,20 @@ export default function AgentDetailPanel({ agent, tasks, activityLog, pipeline, 
           </button>
         </div>
         {forceMsg && <div style={{ fontSize: 11, color: 'var(--bt-green)', marginTop: 6 }}>{forceMsg}</div>}
+
+        {/* Coaching Insight */}
+        {coachingSignals.length > 0 && (
+          <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--bt-muted)', borderRadius: 4, borderLeft: '2px solid var(--bt-accent)' }}>
+            <div style={{ fontSize: 10, color: 'var(--bt-accent)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 6 }}>
+              Coaching Insight
+            </div>
+            {coachingSignals.map((msg, i) => (
+              <div key={i} style={{ fontSize: 12, color: 'var(--bt-text)', marginBottom: i < coachingSignals.length - 1 ? 4 : 0 }}>
+                · {msg}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
