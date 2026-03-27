@@ -12,7 +12,7 @@ export function middleware(request: NextRequest) {
   // Check for valid session cookie
   const session = request.cookies.get('bt_os_session');
   if (!session || session.value !== process.env.SESSION_TOKEN) {
-    const loginUrl = new URL('/login', request.url);
+    const loginUrl = new URL('/login', 'https://bearteam-os-dashboard.vercel.app');
     loginUrl.searchParams.set('from', pathname);
     return NextResponse.redirect(loginUrl);
   }

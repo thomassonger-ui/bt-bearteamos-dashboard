@@ -4,6 +4,7 @@ import { useState, FormEvent, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 function LoginForm() {
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,14 +21,14 @@ function LoginForm() {
       const res = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
       });
 
       if (res.ok) {
         router.push(from);
         router.refresh();
       } else {
-        setError('Incorrect password. Try again.');
+        setError('Invalid username or password. Try again.');
         setPassword('');
       }
     } catch {
@@ -63,7 +64,7 @@ function LoginForm() {
             width: 38, height: 38, background: '#1B2E4B', borderRadius: 8,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontWeight: 800, fontSize: 17, color: '#E8A020',
-          }}>B</div>
+          }}>BT</div>
           <span style={{ fontWeight: 800, fontSize: 20, color: '#1B2E4B', letterSpacing: '-0.3px' }}>
             BearTeam<span style={{ color: '#E8A020' }}>OS</span>
           </span>
@@ -76,10 +77,34 @@ function LoginForm() {
           Agent Dashboard
         </h1>
         <p style={{ fontSize: 13, color: '#64748B', textAlign: 'center', marginBottom: 28, margin: '0 0 28px' }}>
-          Enter your access password to continue
+          Enter your credentials to continue
         </p>
 
         <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: 16 }}>
+            <label style={{
+              display: 'block', fontSize: 11, fontWeight: 700,
+              color: '#475569', marginBottom: 6,
+              textTransform: 'uppercase', letterSpacing: '0.6px',
+            }}>
+              Username
+            </label>
+            <input
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              placeholder="Enter your username"
+              required
+              autoFocus
+              style={{
+                width: '100%', padding: '10px 14px', fontSize: 15,
+                border: `1.5px solid ${error ? '#DC2626' : '#DDE3EC'}`,
+                borderRadius: 7, outline: 'none', color: '#1E293B',
+                background: '#F8FAFC', boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
           <div style={{ marginBottom: 16 }}>
             <label style={{
               display: 'block', fontSize: 11, fontWeight: 700,
@@ -94,7 +119,6 @@ function LoginForm() {
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
               required
-              autoFocus
               style={{
                 width: '100%', padding: '10px 14px', fontSize: 15,
                 border: `1.5px solid ${error ? '#DC2626' : '#DDE3EC'}`,
@@ -118,13 +142,13 @@ function LoginForm() {
 
           <button
             type="submit"
-            disabled={loading || !password}
+            disabled={loading || !username || !password}
             style={{
               width: '100%', padding: '12px',
-              background: loading || !password ? '#94A3B8' : '#1B2E4B',
+              background: loading || !username || !password ? '#94A3B8' : '#1B2E4B',
               color: '#fff', border: 'none', borderRadius: 7,
               fontSize: 14, fontWeight: 700,
-              cursor: loading || !password ? 'not-allowed' : 'pointer',
+              cursor: loading || !username || !password ? 'not-allowed' : 'pointer',
               letterSpacing: '0.2px',
             }}
           >

@@ -1,6 +1,67 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+
+// ─── STAGE-BASED ONBOARDING TASKS ─────────────────────────────────────────
+
+const STAGE_PRIORITIES: Record<string, Array<{ id: number; text: string; section: string }>> = {
+  'onboarding-30': [
+    // Days 1-30 (18 tasks)
+    { id: 1, text: 'Complete broker orientation and office tour', section: 'Getting Started' },
+    { id: 2, text: 'Set up MLS account and learn dashboard basics', section: 'Getting Started' },
+    { id: 3, text: 'Configure email, CRM, and transaction management tools', section: 'Getting Started' },
+    { id: 4, text: 'Review Bear Team policies and compliance requirements', section: 'Getting Started' },
+    { id: 5, text: 'Schedule 1:1 with Tom Songer (Team Lead)', section: 'Getting Started' },
+    { id: 6, text: 'Complete E&O insurance forms and enrollment', section: 'Compliance' },
+    { id: 7, text: 'Attend BearTeam Academy orientation module', section: 'Training' },
+    { id: 8, text: 'Set up transaction file naming convention and folder structure', section: 'Systems' },
+    { id: 9, text: 'Complete first practice transaction in BrokerMint', section: 'Training' },
+    { id: 10, text: 'Upload professional headshot and bio to agent profile', section: 'Marketing' },
+    { id: 11, text: 'Learn showroom showing procedures and FAQs', section: 'Operations' },
+    { id: 12, text: 'Review recent market conditions for Orlando area', section: 'Market Knowledge' },
+    { id: 13, text: 'Set up buyer and seller lead sources (Zillow, ShowingTime, etc)', section: 'Lead Generation' },
+    { id: 14, text: 'Schedule follow-up with Tom Songer on progress', section: 'Check-In' },
+    { id: 15, text: 'Review and sign independent contractor agreement', section: 'Legal' },
+    { id: 16, text: 'Attend team huddle (weekly walkthrough)', section: 'Team' },
+    { id: 17, text: 'Complete first 3 MLS property showings', section: 'Production' },
+    { id: 18, text: 'Log all activities in CRM and review with mentor', section: 'Systems' },
+  ],
+  'onboarding-60': [
+    // Days 30-60 (11 tasks)
+    { id: 19, text: 'Complete first transaction from start to closing', section: 'Milestones' },
+    { id: 20, text: 'Process first commission payment and verify earnings', section: 'Financial' },
+    { id: 21, text: 'Establish buyer database and nurture sequence setup', section: 'Lead Management' },
+    { id: 22, text: 'Review listing strategy and local market trends', section: 'Production' },
+    { id: 23, text: 'Complete mid-program assessment with mentor', section: 'Training' },
+    { id: 24, text: 'Set up quarterly business review (QBR) metrics tracking', section: 'Goals' },
+    { id: 25, text: 'Attend advanced BearTeam Academy modules', section: 'Training' },
+    { id: 26, text: 'Review and optimize daily workflow and time management', section: 'Operations' },
+    { id: 27, text: 'Complete 10 more showings and closing walkthroughs', section: 'Production' },
+    { id: 28, text: 'Network event attendance (broker-sponsored)', section: 'Networking' },
+    { id: 29, text: 'Prepare 60-day progress report for Bethanne', section: 'Check-In' },
+  ],
+  'onboarding-90': [
+    // Days 60-90 (9 tasks)
+    { id: 30, text: 'Complete 5 full transactions (buy and/or sell side)', section: 'Production' },
+    { id: 31, text: 'Establish personal brand and social media strategy', section: 'Marketing' },
+    { id: 32, text: 'Build repeat and referral sources', section: 'Client Relations' },
+    { id: 33, text: 'Final mastery assessment with Tom Songer', section: 'Training' },
+    { id: 34, text: 'Achieve minimum production targets for Phase 3', section: 'Goals' },
+    { id: 35, text: 'Optimize commission structure (tier review)', section: 'Compensation' },
+    { id: 36, text: 'Create personal 90-day action plan for year 2', section: 'Planning' },
+    { id: 37, text: 'Complete full onboarding program graduation review', section: 'Graduation' },
+    { id: 38, text: 'Transition to "Active Agent" independent operations', section: 'Graduation' },
+  ],
+  'active': [
+    // Active agents (6 core responsibilities)
+    { id: 39, text: 'Review leads and follow up on hot prospects (daily)', section: 'Daily' },
+    { id: 40, text: 'Prepare CMAs and pricing analysis for buyers/sellers', section: 'Production' },
+    { id: 41, text: 'Conduct showings and document feedback in CRM', section: 'Production' },
+    { id: 42, text: 'Process transaction documents and manage closing timelines', section: 'Transactions' },
+    { id: 43, text: 'Maintain client relationships and nurture for repeat business', section: 'Client Relations' },
+    { id: 44, text: 'Track production metrics and prepare monthly reports', section: 'Reporting' },
+  ],
+};
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
 
@@ -62,14 +123,14 @@ const SCOUT_STATS = [
 ];
 
 const NAV = [
-  { icon: '⊞', label: 'Dashboard' },
-  { icon: '📈', label: 'Production' },
-  { icon: '📋', label: 'Transactions' },
-  { icon: '✅', label: 'Compliance' },
-  { icon: '🏠', label: 'Listings' },
-  { icon: '📣', label: 'Marketing' },
-  { icon: '🎓', label: 'Academy' },
-  { icon: '🤖', label: 'Scout AI' },
+  { icon: 'D', label: 'Dashboard' },
+  { icon: 'P', label: 'Production' },
+  { icon: 'T', label: 'Transactions' },
+  { icon: 'C', label: 'Compliance' },
+  { icon: 'L', label: 'Listings' },
+  { icon: 'M', label: 'Marketing' },
+  { icon: 'A', label: 'Academy' },
+  { icon: 'S', label: 'Scout AI' },
 ];
 
 // ─── PRIORITY TAG ─────────────────────────────────────────────────────────────
@@ -93,25 +154,63 @@ function PriorityTag({ p }: { p: string }) {
 
 export default function Dashboard() {
   const [done, setDone] = useState<Record<number, boolean>>({});
+  const [agentName, setAgentName] = useState('Agent');
+  const [agentInitials, setAgentInitials] = useState('--');
+  const [stage, setStage] = useState('active');
+  const [stageTasks, setStageTasks] = useState<typeof STAGE_PRIORITIES['active']>([]);
+
   const toggle = (id: number) => setDone(prev => ({ ...prev, [id]: !prev[id] }));
   const completedCount = Object.values(done).filter(Boolean).length;
 
+  // Read cookies on mount
+  useEffect(() => {
+    const getCookie = (name: string) => {
+      const match = document.cookie.match(new RegExp(`${name}=([^;]+)`));
+      return match ? decodeURIComponent(match[1]) : null;
+    };
+
+    const nameFromCookie = getCookie('bt_os_agent');
+    const stageFromCookie = getCookie('bt_os_stage') || 'active';
+
+    if (nameFromCookie) {
+      setAgentName(nameFromCookie);
+      // Extract initials: "Tom Songer" → "TS"
+      const initials = nameFromCookie
+        .split(' ')
+        .map(part => part[0])
+        .join('')
+        .toUpperCase();
+      setAgentInitials(initials);
+    }
+
+    setStage(stageFromCookie);
+    setStageTasks(STAGE_PRIORITIES[stageFromCookie] || STAGE_PRIORITIES['active']);
+  }, []);
+
+  // Stage badge
+  const stageBadgeText = {
+    'onboarding-30': 'Days 1-30',
+    'onboarding-60': 'Days 30-60',
+    'onboarding-90': 'Days 60-90',
+    'active': 'Active Agent',
+  }[stage] || 'Active Agent';
+
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column', height: '100vh',
+      display: 'flex', flexDirection: 'column', minHeight: '100vh',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      background: '#F1F4F8', overflow: 'hidden', color: '#1E293B',
+      background: '#F1F4F8', color: '#1E293B',
     }}>
 
-      {/* ── TOP NAVBAR ─────────────────────────────────────────────────── */}
+      {/* ── TOP NAVBAR ─────────────────────────────────────────────────────── */}
       <header style={{
         height: 52, background: '#1B2E4B', display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between', padding: '0 20px', position: 'fixed',
-        top: 0, left: 0, right: 0, zIndex: 200, flexShrink: 0,
+        justifyContent: 'space-between', padding: '0 20px', position: 'sticky',
+        top: 0, zIndex: 200, flexShrink: 0, boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
       }}>
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 28, height: 28, background: '#E8A020', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13, color: '#fff' }}>B</div>
+          <div style={{ width: 28, height: 28, background: '#E8A020', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11, color: '#fff' }}>BT</div>
           <span style={{ fontWeight: 700, fontSize: 15, color: '#fff', letterSpacing: '-0.2px' }}>BearTeam<span style={{ color: '#E8A020' }}>OS</span></span>
         </div>
 
@@ -125,15 +224,15 @@ export default function Dashboard() {
             <span style={{ position: 'absolute', top: -5, right: -5, background: '#DC2626', color: '#fff', borderRadius: 8, fontSize: 9, fontWeight: 800, padding: '1px 4px', lineHeight: 1.4 }}>5</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-            <div style={{ width: 30, height: 30, background: '#2563EB', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 12 }}>TS</div>
-            <span style={{ fontSize: 13, color: '#E2E8F0', fontWeight: 500 }}>Tom Songer</span>
+            <div style={{ width: 30, height: 30, background: '#2563EB', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700, fontSize: 12 }}>{agentInitials}</div>
+            <span style={{ fontSize: 13, color: '#E2E8F0', fontWeight: 500 }}>{agentName}</span>
             <span style={{ color: '#64748B', fontSize: 10 }}>▾</span>
           </div>
         </div>
       </header>
 
       {/* ── BODY ───────────────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', marginTop: 52, height: 'calc(100vh - 52px)' }}>
+      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
         {/* ── SIDEBAR ──────────────────────────────────────────────────── */}
         <nav style={{
@@ -153,7 +252,7 @@ export default function Dashboard() {
                 fontWeight: active ? 600 : 400,
                 fontSize: 13.5,
               }}>
-                <span style={{ fontSize: 15, width: 18, textAlign: 'center', flexShrink: 0 }}>{item.icon}</span>
+                <span style={{ fontSize: 14, width: 18, textAlign: 'center', flexShrink: 0, fontWeight: 700 }}>{item.icon}</span>
                 {item.label}
               </div>
             );
@@ -177,10 +276,70 @@ export default function Dashboard() {
         {/* ── MAIN ─────────────────────────────────────────────────────── */}
         <main style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-          {/* ── ZONE 1: CRITICAL ALERTS ──────────────────────────────── */}
+          {/* ── WELCOME BANNER ────────────────────────────────────────── */}
+          <section style={{ background: 'linear-gradient(135deg, #1B2E4B 0%, #2D4A7B 100%)', borderRadius: 8, padding: '16px 20px', color: '#fff' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Good morning, {agentName}</h2>
+                <p style={{ margin: 0, fontSize: 13, color: '#CBD5E1' }}>Welcome to BearTeamOS — Your command center for success</p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ background: 'rgba(255,255,255,0.2)', padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{stageBadgeText}</span>
+              </div>
+            </div>
+          </section>
+
+          {/* ── TODAY'S PRIORITIES ────────────────────────────────────── */}
+          <section style={{ background: '#fff', border: '1px solid #DDE3EC', borderRadius: 7, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ padding: '12px 16px', borderBottom: '1px solid #E8EDF4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+              <div>
+                <span style={{ fontWeight: 700, fontSize: 14, color: '#1B2E4B' }}>Today's Priorities</span>
+                <span style={{ fontSize: 12, color: '#94A3B8', marginLeft: 8 }}>Onboarding checklist</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 12, color: '#64748B', fontWeight: 600 }}>{completedCount}/{stageTasks.length}</span>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            <div style={{ height: 3, background: '#E8EDF4', flexShrink: 0 }}>
+              <div style={{ height: '100%', background: '#2563EB', width: `${(completedCount / stageTasks.length) * 100}%`, transition: 'width 0.3s' }} />
+            </div>
+
+            <div style={{ overflowY: 'auto', flex: 1, maxHeight: '400px' }}>
+              {stageTasks.map((task, i) => (
+                <div key={task.id} onClick={() => toggle(task.id)} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 16px',
+                  borderBottom: i < stageTasks.length - 1 ? '1px solid #F1F5F9' : 'none',
+                  cursor: 'pointer', background: done[task.id] ? '#FAFBFC' : '#fff',
+                  transition: 'background 0.15s',
+                }}>
+                  {/* Checkbox */}
+                  <div style={{
+                    width: 18, height: 18, borderRadius: 4, marginTop: 1, flexShrink: 0,
+                    border: done[task.id] ? 'none' : '1.5px solid #CBD5E1',
+                    background: done[task.id] ? '#2563EB' : 'transparent',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}>
+                    {done[task.id] && <span style={{ color: '#fff', fontSize: 11, fontWeight: 800 }}>✓</span>}
+                  </div>
+                  {/* Content */}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: 13, color: done[task.id] ? '#94A3B8' : '#1E293B', textDecoration: done[task.id] ? 'line-through' : 'none', lineHeight: 1.4 }}>{task.text}</span>
+                  </div>
+                  {/* Tag */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    <span style={{ fontSize: 10, color: '#64748B', background: '#F1F5F9', padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap' }}>{task.section}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* ── CRITICAL ALERTS ──────────────────────────────────────── */}
           <section>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '0.8px' }}>⚠ Critical Alerts</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Critical Alerts</span>
               <span style={{ fontSize: 11, color: '#94A3B8' }}>— These require action before anything else</span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
@@ -209,143 +368,6 @@ export default function Dashboard() {
               })}
             </div>
           </section>
-
-          {/* ── ZONE 2: PRODUCTION PIPELINE ──────────────────────────── */}
-          <section>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#1B365D', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Production Pipeline</span>
-              <span style={{ fontSize: 11, color: '#94A3B8' }}>— Business health at a glance</span>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-              {PIPELINE.map((p, i) => {
-                const atRisk = p.status === 'risk';
-                return (
-                  <div key={i} style={{
-                    background: '#fff', borderRadius: 7, padding: '14px 16px',
-                    border: `1px solid ${atRisk ? '#FDE68A' : '#DDE3EC'}`,
-                    borderLeft: `4px solid ${atRisk ? '#F59E0B' : '#2563EB'}`,
-                    cursor: 'pointer',
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                      <span style={{ fontSize: 12, color: '#64748B', fontWeight: 500 }}>{p.label}</span>
-                      <span style={{ fontSize: 16 }}>{p.icon}</span>
-                    </div>
-                    <div style={{ fontSize: 30, fontWeight: 800, color: atRisk ? '#D97706' : '#1B2E4B', lineHeight: 1 }}>{p.value}</div>
-                    <div style={{ marginTop: 5, fontSize: 11.5, color: atRisk ? '#D97706' : '#64748B', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      {atRisk ? '⚠' : '↑'} {p.sub}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          {/* ── ZONES 3 + 4: DAILY EXECUTION + SCOUT AI ─────────────── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 380px', gap: 14, flex: 1, minHeight: 0 }}>
-
-            {/* ── ZONE 3: DAILY EXECUTION ──────────────────────────── */}
-            <section style={{ background: '#fff', border: '1px solid #DDE3EC', borderRadius: 7, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid #E8EDF4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-                <div>
-                  <span style={{ fontWeight: 700, fontSize: 14, color: '#1B2E4B' }}>Daily Execution</span>
-                  <span style={{ fontSize: 12, color: '#94A3B8', marginLeft: 8 }}>System-generated task queue</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 12, color: '#64748B' }}>{completedCount}/{DAILY_TASKS.length} completed</span>
-                  <button style={{ padding: '5px 12px', background: '#1B2E4B', color: '#fff', border: 'none', borderRadius: 5, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                    + Add Task
-                  </button>
-                </div>
-              </div>
-
-              {/* Progress bar */}
-              <div style={{ height: 3, background: '#E8EDF4', flexShrink: 0 }}>
-                <div style={{ height: '100%', background: '#2563EB', width: `${(completedCount / DAILY_TASKS.length) * 100}%`, transition: 'width 0.3s' }} />
-              </div>
-
-              <div style={{ overflowY: 'auto', flex: 1 }}>
-                {DAILY_TASKS.map((task, i) => (
-                  <div key={task.id} onClick={() => toggle(task.id)} style={{
-                    display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 16px',
-                    borderBottom: i < DAILY_TASKS.length - 1 ? '1px solid #F1F5F9' : 'none',
-                    cursor: 'pointer', background: done[task.id] ? '#FAFBFC' : '#fff',
-                    transition: 'background 0.15s',
-                  }}>
-                    {/* Checkbox */}
-                    <div style={{
-                      width: 18, height: 18, borderRadius: 4, marginTop: 1, flexShrink: 0,
-                      border: done[task.id] ? 'none' : '1.5px solid #CBD5E1',
-                      background: done[task.id] ? '#2563EB' : 'transparent',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      {done[task.id] && <span style={{ color: '#fff', fontSize: 11, fontWeight: 800 }}>✓</span>}
-                    </div>
-                    {/* Content */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: 13, color: done[task.id] ? '#94A3B8' : '#1E293B', textDecoration: done[task.id] ? 'line-through' : 'none', lineHeight: 1.4 }}>{task.text}</span>
-                    </div>
-                    {/* Tags */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                      <span style={{ fontSize: 10, color: '#64748B', background: '#F1F5F9', padding: '2px 6px', borderRadius: 4 }}>{task.tag}</span>
-                      <PriorityTag p={task.priority} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            {/* ── ZONE 4: SCOUT AI ─────────────────────────────────── */}
-            <section style={{ background: '#fff', border: '1px solid #DDE3EC', borderRadius: 7, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <div style={{ padding: '12px 16px', borderBottom: '1px solid #E8EDF4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-                <div>
-                  <span style={{ fontWeight: 700, fontSize: 14, color: '#1B2E4B' }}>Scout AI</span>
-                  <span style={{ fontSize: 11, marginLeft: 6, color: '#059669', background: '#ECFDF5', padding: '2px 7px', borderRadius: 10, fontWeight: 600 }}>● Live</span>
-                </div>
-                <span style={{ fontSize: 11, color: '#64748B' }}>Decision layer</span>
-              </div>
-
-              {/* Stats grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: '12px 14px', borderBottom: '1px solid #E8EDF4', flexShrink: 0 }}>
-                {SCOUT_STATS.map((s, i) => (
-                  <div key={i} style={{ background: '#F8FAFC', borderRadius: 6, padding: '9px 12px', textAlign: 'center', border: '1px solid #E8EDF4' }}>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.value}</div>
-                    <div style={{ fontSize: 10.5, color: '#64748B', marginTop: 3 }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* AI Recommendations */}
-              <div style={{ padding: '12px 14px', borderBottom: '1px solid #E8EDF4', flexShrink: 0 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#1B2E4B', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 8 }}>What You Should Do Next</div>
-                {SCOUT_RECS.map((rec, i) => (
-                  <div key={i} style={{ padding: '9px 10px', marginBottom: 6, background: '#F8FAFC', borderRadius: 6, border: '1px solid #E8EDF4', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ width: 18, height: 18, background: '#1B2E4B', color: '#fff', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, flexShrink: 0 }}>{rec.priority}</span>
-                        <span style={{ fontSize: 12.5, fontWeight: 600, color: '#1E293B' }}>{rec.action}</span>
-                      </div>
-                      <button style={{ padding: '3px 9px', background: '#2563EB', color: '#fff', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer', flexShrink: 0 }}>{rec.cta}</button>
-                    </div>
-                    <p style={{ fontSize: 11.5, color: '#64748B', margin: 0, lineHeight: 1.4, paddingLeft: 24 }}>{rec.reason}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Run My Day CTA */}
-              <div style={{ padding: '14px', flexShrink: 0, marginTop: 'auto' }}>
-                <button style={{
-                  width: '100%', padding: '11px', background: '#1B2E4B', color: '#fff',
-                  border: 'none', borderRadius: 7, fontSize: 14, fontWeight: 700, cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                }}>
-                  <span>🤖</span> Run My Day
-                </button>
-                <p style={{ fontSize: 11, color: '#94A3B8', textAlign: 'center', margin: '6px 0 0', lineHeight: 1.4 }}>
-                  Scout will sequence your top 5 priorities and auto-prep each task
-                </p>
-              </div>
-            </section>
-          </div>
 
         </main>
       </div>
