@@ -6,6 +6,7 @@ import {
   markOverdueTasks,
   logActivity,
   updateAgentLastActive,
+  updateAgentStreaks,
   ruleTaskExists,
   countPendingOnboardingTasks,
   deduplicateTasks,
@@ -13,27 +14,63 @@ import {
 
 // ─── MAIN ENGINE ENTRY POINT ─────────────────────────────────────────────────
 // Called on: dashboard load, login
-// Runs all 4 rules in order — fully idempotent via source_rule + source_ref
+// Runs all base rules + escalation levels — fully idempotent
 
 export async function runEngine(agentId: string): Promise<void> {
-  // 0. Safety pass: remove any exact duplicate pending tasks (same title)
+  // 0. Safety pass: remove duplicate pending tasks
   await deduplicateTasks(agentId)
 
   // 0b. Mark overdue (pending tasks past due_date)
   await markOverdueTasks(agentId)
 
   const now = new Date()
+  const { supabase } = await import('./supabase')
 
-  // ── RULE 1: Inactivity Recovery ──────────────────────────────────────────
-  // Trigger: no activity_log entry in last 24 hours
-  // Idempotency: source_rule='inactivity', source_ref=today's date (YYYY-MM-DD)
+  // ── STREAK CALCULATION ────────────────────────────────────────────────────
+  // Fetch current streak values from DB
+  const { data: agentRow } = await supabase
+    .from('agents')
+    .select('inactivity_streak, missed_streak, onboarding_stage')
+    .eq('id', agentId)
+    .single()
+
+  const currentInactivityStreak: number = agentRow?.inactivity_streak ?? 0
+  const currentMissedStreak: number = agentRow?.missed_streak ?? 0
+  const onboardingDay: number = agentRow?.onboarding_stage ?? 0
+
+  // Calculate inactivity: if ≥24h since last activity → increment, else reset
   const lastActivity = await getLastActivityTime(agentId)
   const hoursInactive = lastActivity
     ? (now.getTime() - lastActivity.getTime()) / (1000 * 60 * 60)
     : 999
 
+  const newInactivityStreak = hoursInactive >= 24
+    ? currentInactivityStreak + 1
+    : 0
+
+  // Calculate missed streak: count missed tasks in last 48h window
+  const cutoff48h = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString()
+  const { data: recentMissed } = await supabase
+    .from('tasks')
+    .select('id')
+    .eq('agent_id', agentId)
+    .eq('status', 'missed')
+    .gte('created_at', cutoff48h)
+
+  const recentMissedCount = recentMissed?.length ?? 0
+  const newMissedStreak = recentMissedCount >= 2
+    ? currentMissedStreak + 1
+    : 0
+
+  // Persist updated streaks
+  await updateAgentStreaks(agentId, newInactivityStreak, newMissedStreak)
+
+  const todayKey = now.toISOString().slice(0, 10) // YYYY-MM-DD
+
+  // ── RULE 1: Inactivity Recovery (Level 1 — Base) ─────────────────────────
+  // Trigger: no activity in last 24 hours
+  // Idempotency: source_rule='inactivity', source_ref=today's date
   if (hoursInactive >= 24) {
-    const todayKey = now.toISOString().slice(0, 10) // YYYY-MM-DD
     const exists = await ruleTaskExists(agentId, 'inactivity', todayKey)
     if (!exists) {
       await createTask({
@@ -55,9 +92,9 @@ export async function runEngine(agentId: string): Promise<void> {
     }
   }
 
-  // ── RULE 2: Pipeline Stall ────────────────────────────────────────────────
+  // ── RULE 2: Pipeline Stall (Level 1 — Base) ───────────────────────────────
   // Trigger: pipeline.last_contact > 3 days
-  // Idempotency: source_rule='pipeline_stall', source_ref=lead.id (per lead)
+  // Idempotency: source_rule='pipeline_stall', source_ref=lead.id
   const staleLeads = await getStalePipelineLeads(agentId, 3)
   let rule2Created = 0
 
@@ -91,17 +128,7 @@ export async function runEngine(agentId: string): Promise<void> {
   }
 
   // ── RULE 3: Onboarding Enforcement ───────────────────────────────────────
-  // Trigger: onboarding_stage < 30
-  // Idempotency: source_rule='onboarding', source_ref=title_slug — counted via countPendingOnboardingTasks
-  const { supabase } = await import('./supabase')
-  const { data: agentRow } = await supabase
-    .from('agents')
-    .select('onboarding_stage')
-    .eq('id', agentId)
-    .single()
-
-  const onboardingDay: number = agentRow?.onboarding_stage ?? 0
-
+  // Idempotency: source_rule='onboarding', source_ref=title_slug
   if (onboardingDay < 30) {
     const ONBOARDING_TASKS = [
       { title: 'Review BearTeam Standards & Practices', slug: 'review-standards' },
@@ -145,7 +172,6 @@ export async function runEngine(agentId: string): Promise<void> {
   }
 
   // ── RULE 4: Missed Task Pressure ─────────────────────────────────────────
-  // Trigger: task.status = 'missed'
   // Idempotency: source_rule='retry', source_ref=original_task.id
   const { data: missedRows } = await supabase
     .from('tasks')
@@ -183,22 +209,138 @@ export async function runEngine(agentId: string): Promise<void> {
     })
   }
 
+  // ── ESCALATION: Level 2 — Moderate Pressure ──────────────────────────────
+  // Trigger: inactivity_streak ≥ 2 OR missed_streak ≥ 2
+  // One task per day, idempotent
+  if (newInactivityStreak >= 2 || newMissedStreak >= 2) {
+    const exists = await ruleTaskExists(agentId, 'pressure_level_2', todayKey)
+    if (!exists) {
+      await createTask({
+        agent_id: agentId,
+        type: 'pressure',
+        title: 'Complete 15 calls today',
+        description: `Escalation: ${newInactivityStreak >= 2 ? `${newInactivityStreak} consecutive days inactive` : `${newMissedStreak} consecutive runs with missed tasks`}. Increased output required.`,
+        status: 'pending',
+        due_date: new Date(now.getTime() + 6 * 60 * 60 * 1000).toISOString(),
+        source_rule: 'pressure_level_2',
+        source_ref: todayKey,
+      })
+      await logActivity({
+        agent_id: agentId,
+        action_type: 'pressure_level_2_triggered',
+        description: `Level 2 pressure: inactivity_streak=${newInactivityStreak}, missed_streak=${newMissedStreak}`,
+        outcome: 'neutral',
+      })
+    }
+  }
+
+  // ── ESCALATION: Level 3 — High Pressure ──────────────────────────────────
+  // Trigger: inactivity_streak ≥ 3 OR missed_streak ≥ 3
+  // Creates two tasks: high call volume + mandatory broker check-in
+  if (newInactivityStreak >= 3 || newMissedStreak >= 3) {
+    const [existsL3, existsBroker] = await Promise.all([
+      ruleTaskExists(agentId, 'pressure_level_3', todayKey),
+      ruleTaskExists(agentId, 'broker_check', todayKey),
+    ])
+
+    if (!existsL3) {
+      await createTask({
+        agent_id: agentId,
+        type: 'pressure',
+        title: 'Complete 25 calls + update all leads',
+        description: `High pressure escalation: ${newInactivityStreak >= 3 ? `${newInactivityStreak} consecutive days inactive` : `${newMissedStreak} consecutive runs with missed tasks`}. All pipeline leads must be updated today.`,
+        status: 'pending',
+        due_date: new Date(now.getTime() + 4 * 60 * 60 * 1000).toISOString(),
+        source_rule: 'pressure_level_3',
+        source_ref: todayKey,
+      })
+    }
+
+    if (!existsBroker) {
+      await createTask({
+        agent_id: agentId,
+        type: 'compliance',
+        title: 'MANDATORY: Check in with broker',
+        description: `Required broker check-in due to sustained performance issues (streak ${Math.max(newInactivityStreak, newMissedStreak)} days). Contact Tom Songer or Bethanne Baer today.`,
+        status: 'pending',
+        due_date: new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(),
+        source_rule: 'broker_check',
+        source_ref: todayKey,
+      })
+    }
+
+    if (!existsL3 || !existsBroker) {
+      await logActivity({
+        agent_id: agentId,
+        action_type: 'pressure_level_3_triggered',
+        description: `Level 3 pressure: inactivity_streak=${newInactivityStreak}, missed_streak=${newMissedStreak}`,
+        outcome: 'neutral',
+      })
+    }
+  }
+
+  // ── ESCALATION: Level 4 — Critical (Hard Enforcement) ────────────────────
+  // Trigger: inactivity_streak ≥ 5
+  // Creates critical task + flags agent in activity_log for broker visibility
+  if (newInactivityStreak >= 5) {
+    const exists = await ruleTaskExists(agentId, 'critical_recovery', todayKey)
+    if (!exists) {
+      await createTask({
+        agent_id: agentId,
+        type: 'critical',
+        title: 'CRITICAL: Re-engage immediately — 30 calls required',
+        description: `Agent has been inactive for ${newInactivityStreak} consecutive days. Immediate re-engagement mandatory. 30 outbound calls required today. Broker has been notified.`,
+        status: 'pending',
+        due_date: new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(),
+        source_rule: 'critical_recovery',
+        source_ref: todayKey,
+      })
+      await logActivity({
+        agent_id: agentId,
+        action_type: 'critical_triggered',
+        description: `Level 4 CRITICAL: agent inactive ${newInactivityStreak} consecutive days — flagged for broker`,
+        outcome: 'neutral',
+      })
+      // Flag agent for broker visibility
+      await logActivity({
+        agent_id: agentId,
+        action_type: 'agent_flagged_critical',
+        description: `Agent flagged CRITICAL: ${newInactivityStreak} day inactivity streak. Broker action required.`,
+        outcome: 'failure',
+      })
+    }
+  }
+
   // Final: update agent last_active timestamp
   await updateAgentLastActive(agentId)
 }
 
 // ─── UTILITY FUNCTIONS ───────────────────────────────────────────────────────
 
+// Priority weight for sorting — lower number = higher priority
+function taskPriorityWeight(task: Task): number {
+  // Critical tasks first
+  if (task.source_rule === 'critical_recovery') return 0
+  if (task.type === 'critical') return 0
+  // Overdue tasks
+  if (task.status === 'overdue') return 1
+  // Pressure level 3 / broker check
+  if (task.source_rule === 'pressure_level_3') return 2
+  if (task.source_rule === 'broker_check') return 2
+  // Pressure level 2
+  if (task.source_rule === 'pressure_level_2') return 3
+  // Pending tasks
+  if (task.status === 'pending') return 4
+  // Completed / missed last
+  if (task.status === 'completed') return 6
+  if (task.status === 'missed') return 7
+  return 5
+}
+
 export function prioritizeTasks(tasks: Task[]): Task[] {
-  const order: Record<string, number> = {
-    overdue: 0,
-    pending: 1,
-    completed: 2,
-    missed: 3,
-  }
   return [...tasks].sort((a, b) => {
-    const statusDiff = order[a.status] - order[b.status]
-    if (statusDiff !== 0) return statusDiff
+    const weightDiff = taskPriorityWeight(a) - taskPriorityWeight(b)
+    if (weightDiff !== 0) return weightDiff
     return new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
   })
 }
