@@ -10,6 +10,8 @@ export interface Agent {
   last_active: string         // ISO timestamp
   inactivity_streak: number   // consecutive days inactive (≥24h each)
   missed_streak: number       // consecutive engine runs with ≥2 missed tasks in 48h
+  performance_score: number   // 0–100, calculated each engine run
+  last_score_update?: string  // ISO timestamp of last score calculation
   start_date?: string
   created_at: string
   updated_at?: string
