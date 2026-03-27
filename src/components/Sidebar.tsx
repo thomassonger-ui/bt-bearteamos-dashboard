@@ -53,7 +53,10 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div style={{ padding: '14px 20px', borderTop: '1px solid var(--bt-border)' }}>
+      <div style={{ padding: '14px 20px', borderTop: '1px solid var(--bt-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <Link href="/broker" style={{ fontSize: 11, color: 'var(--bt-accent)', letterSpacing: '0.06em' }}>
+          Broker View →
+        </Link>
         <Link href="/login" style={{ fontSize: 11, color: 'var(--bt-text-dim)' }}>
           Sign out
         </Link>
