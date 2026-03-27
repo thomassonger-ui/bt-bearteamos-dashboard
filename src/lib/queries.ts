@@ -1,10 +1,10 @@
-import { supabase } from './supabase'
+import { getSupabase } from './getSupabase()'
 import type { Agent, Task, ActivityLog, Pipeline, ComplianceRecord } from '@/types'
 
 // ─── AGENT ────────────────────────────────────────────────────────────────────
 
 export async function getAgent(agentId: string): Promise<Agent | null> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('agents')
     .select('*')
     .eq('id', agentId)
@@ -14,7 +14,7 @@ export async function getAgent(agentId: string): Promise<Agent | null> {
 }
 
 export async function getFirstAgent(): Promise<Agent | null> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('agents')
     .select('*')
     .order('created_at', { ascending: true })
@@ -25,7 +25,7 @@ export async function getFirstAgent(): Promise<Agent | null> {
 }
 
 export async function updateAgentLastActive(agentId: string): Promise<void> {
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('agents')
     .update({ last_active: new Date().toISOString() })
     .eq('id', agentId)
@@ -40,7 +40,7 @@ export async function updateAgentScore(
   agentId: string,
   score: number
 ): Promise<void> {
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('agents')
     .update({ performance_score: score, last_score_update: new Date().toISOString() })
     .eq('id', agentId)
@@ -56,7 +56,7 @@ export async function updateAgentStreaks(
   inactivityStreak: number,
   missedStreak: number
 ): Promise<void> {
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('agents')
     .update({ inactivity_streak: inactivityStreak, missed_streak: missedStreak })
     .eq('id', agentId)
@@ -66,7 +66,7 @@ export async function updateAgentStreaks(
 // ─── TASKS ────────────────────────────────────────────────────────────────────
 
 export async function getTasks(agentId: string): Promise<Task[]> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('tasks')
     .select('*')
     .eq('agent_id', agentId)
@@ -76,7 +76,7 @@ export async function getTasks(agentId: string): Promise<Task[]> {
 }
 
 export async function createTask(task: Omit<Task, 'id' | 'created_at'>): Promise<Task | null> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('tasks')
     .insert(task)
     .select()
@@ -99,7 +99,7 @@ export async function ruleTaskExists(
   sourceRule: string,
   sourceRef: string
 ): Promise<boolean> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('tasks')
     .select('id')
     .eq('agent_id', agentId)
@@ -114,7 +114,7 @@ export async function ruleTaskExists(
  * Count pending onboarding tasks for Rule 3.
  */
 export async function countPendingOnboardingTasks(agentId: string): Promise<number> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('tasks')
     .select('id')
     .eq('agent_id', agentId)
@@ -130,7 +130,7 @@ export async function countPendingOnboardingTasks(agentId: string): Promise<numb
  */
 export async function deduplicateTasks(agentId: string): Promise<void> {
   // Fetch all pending/overdue tasks for this agent
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('tasks')
     .select('id, title, status, created_at')
     .eq('agent_id', agentId)
@@ -150,7 +150,7 @@ export async function deduplicateTasks(agentId: string): Promise<void> {
   }
 
   if (toDelete.length > 0) {
-    await supabase.from('tasks').delete().in('id', toDelete)
+    await getSupabase().from('tasks').delete().in('id', toDelete)
     console.log(`[engine] Deduplication: removed ${toDelete.length} duplicate task(s)`)
   }
 }
@@ -162,7 +162,7 @@ export async function updateTaskStatus(
 ): Promise<void> {
   const update: Partial<Task> = { status }
   if (completedAt) update.completed_at = completedAt
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('tasks')
     .update(update)
     .eq('id', taskId)
@@ -171,7 +171,7 @@ export async function updateTaskStatus(
 
 export async function markOverdueTasks(agentId: string): Promise<void> {
   const now = new Date().toISOString()
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('tasks')
     .update({ status: 'overdue' })
     .eq('agent_id', agentId)
@@ -183,7 +183,7 @@ export async function markOverdueTasks(agentId: string): Promise<void> {
 // ─── ACTIVITY LOG ─────────────────────────────────────────────────────────────
 
 export async function getActivityLog(agentId: string, limit = 50): Promise<ActivityLog[]> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('activity_log')
     .select('*')
     .eq('agent_id', agentId)
@@ -194,12 +194,12 @@ export async function getActivityLog(agentId: string, limit = 50): Promise<Activ
 }
 
 export async function logActivity(entry: Omit<ActivityLog, 'id' | 'created_at'>): Promise<void> {
-  const { error } = await supabase.from('activity_log').insert(entry)
+  const { error } = await getSupabase().from('activity_log').insert(entry)
   if (error) console.error('logActivity:', error.message)
 }
 
 export async function getLastActivityTime(agentId: string): Promise<Date | null> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('activity_log')
     .select('created_at')
     .eq('agent_id', agentId)
@@ -213,7 +213,7 @@ export async function getLastActivityTime(agentId: string): Promise<Date | null>
 // ─── PIPELINE ─────────────────────────────────────────────────────────────────
 
 export async function getPipeline(agentId: string): Promise<Pipeline[]> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('pipeline')
     .select('*')
     .eq('agent_id', agentId)
@@ -223,7 +223,7 @@ export async function getPipeline(agentId: string): Promise<Pipeline[]> {
 }
 
 export async function updateLastContact(pipelineId: string): Promise<void> {
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('pipeline')
     .update({ last_contact: new Date().toISOString() })
     .eq('id', pipelineId)
@@ -232,7 +232,7 @@ export async function updateLastContact(pipelineId: string): Promise<void> {
 
 export async function getStalePipelineLeads(agentId: string, daysStale = 3): Promise<Pipeline[]> {
   const cutoff = new Date(Date.now() - daysStale * 24 * 60 * 60 * 1000).toISOString()
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('pipeline')
     .select('*')
     .eq('agent_id', agentId)
@@ -245,7 +245,7 @@ export async function getStalePipelineLeads(agentId: string, daysStale = 3): Pro
 // ─── COMPLIANCE ───────────────────────────────────────────────────────────────
 
 export async function getCompliance(agentId: string): Promise<ComplianceRecord[]> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('compliance')
     .select('*')
     .eq('agent_id', agentId)
@@ -263,7 +263,7 @@ export async function updateComplianceStatus(
     updated_at: new Date().toISOString(),
   }
   if (status === 'completed') update.completed_at = new Date().toISOString()
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('compliance')
     .update(update)
     .eq('id', complianceId)
@@ -274,7 +274,7 @@ export async function updateComplianceStatus(
 
 /** All agents — broker view */
 export async function getAllAgents(): Promise<Agent[]> {
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()
     .from('agents')
     .select('*')
     .order('created_at', { ascending: true })
@@ -284,7 +284,7 @@ export async function getAllAgents(): Promise<Agent[]> {
 
 /** All tasks across all agents, or for a specific agent */
 export async function getAllTasks(agentId?: string): Promise<Task[]> {
-  let query = supabase.from('tasks').select('*')
+  let query = getSupabase().from('tasks').select('*')
   if (agentId) query = query.eq('agent_id', agentId)
   const { data, error } = await query.order('due_date', { ascending: true })
   if (error) { console.error('getAllTasks:', error.message); return [] }
@@ -293,7 +293,7 @@ export async function getAllTasks(agentId?: string): Promise<Task[]> {
 
 /** All compliance records across all agents, or for a specific agent */
 export async function getAllCompliance(agentId?: string): Promise<ComplianceRecord[]> {
-  let query = supabase.from('compliance').select('*')
+  let query = getSupabase().from('compliance').select('*')
   if (agentId) query = query.eq('agent_id', agentId)
   const { data, error } = await query.order('updated_at', { ascending: true })
   if (error) { console.error('getAllCompliance:', error.message); return [] }
@@ -302,7 +302,7 @@ export async function getAllCompliance(agentId?: string): Promise<ComplianceReco
 
 /** All pipeline records across all agents, or for a specific agent */
 export async function getAllPipeline(agentId?: string): Promise<Pipeline[]> {
-  let query = supabase.from('pipeline').select('*')
+  let query = getSupabase().from('pipeline').select('*')
   if (agentId) query = query.eq('agent_id', agentId)
   const { data, error } = await query.order('last_contact', { ascending: true })
   if (error) { console.error('getAllPipeline:', error.message); return [] }
@@ -311,7 +311,7 @@ export async function getAllPipeline(agentId?: string): Promise<Pipeline[]> {
 
 /** Reset all missed tasks for an agent back to pending */
 export async function resetMissedTasks(agentId: string): Promise<void> {
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('tasks')
     .update({ status: 'pending', completed_at: null })
     .eq('agent_id', agentId)
