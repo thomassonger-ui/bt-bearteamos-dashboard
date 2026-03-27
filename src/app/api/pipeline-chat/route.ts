@@ -1,9 +1,6 @@
 export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
-import { openai } from '@ai-sdk/openai'
-import { generateText, generateObject } from 'ai'
-import { z } from 'zod'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -11,68 +8,108 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-// Schema for structured lead extraction
-const LeadSchema = z.object({
-  has_lead: z.boolean().describe('true if a client name was mentioned'),
-  reply: z.string().describe('1-sentence confirmation to show the agent'),
-  lead_name: z.string().optional().describe('Full name of the client'),
-  stage: z.enum(['new_lead', 'contacted', 'appointment_set', 'under_contract', 'closed']).optional(),
-  notes: z.string().optional().describe('Any details: area, budget, property type, timeline'),
-  update_lead_id: z.string().optional().describe('ID of existing lead to update instead of creating new'),
-})
+const VALID_STAGES = ['new_lead','contacted','appointment_set','under_contract','closed']
 
 export async function POST(req: Request) {
   try {
     const { messages, agentId } = await req.json()
-
     if (!agentId || !messages?.length) {
       return NextResponse.json({ error: 'missing_params' }, { status: 400 })
     }
 
-    // Get existing pipeline for context
     const { data: pipeline } = await supabase
       .from('pipeline')
-      .select('id, lead_name, stage, notes')
+      .select('id, lead_name, stage')
       .eq('agent_id', agentId)
       .order('last_contact', { ascending: false })
       .limit(20)
 
-    const pipelineContext = pipeline?.length
-      ? `Current pipeline:\n` + pipeline.map((l: {id: string; lead_name: string; stage: string}) => `- ${l.lead_name} [${l.stage}] id:${l.id}`).join('\n')
-      : 'No leads yet.'
+    const pipelineList = pipeline?.length
+      ? pipeline.map((l: {id: string; lead_name: string; stage: string}) => `- ${l.lead_name} [${l.stage}] id:${l.id}`).join('\n')
+      : 'None yet.'
 
     const lastMessage = messages[messages.length - 1]?.content ?? ''
 
-    // Use generateObject to force structured output — no parsing needed
-    const { object } = await generateObject({
-      model: openai('gpt-4o-mini'),
-      schema: LeadSchema,
-      prompt: `You are a pipeline assistant for a real estate agent.
+    // Call OpenAI directly with JSON mode
+    const oaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: `You are a pipeline assistant. Extract client info and return JSON only.
 
-${pipelineContext}
+Current pipeline:
+${pipelineList}
 
-Agent said: "${lastMessage}"
+Return this exact JSON structure:
+{
+  "has_lead": true/false,
+  "reply": "one sentence confirmation",
+  "lead_name": "Full Name or null",
+  "stage": "new_lead|contacted|appointment_set|under_contract|closed or null",
+  "notes": "any details or null",
+  "update_lead_id": "existing lead id if updating, otherwise null"
+}
 
-Instructions:
-- If agent mentions a client name, set has_lead=true and extract lead_name, stage (default: new_lead), notes
-- If agent wants to update an existing lead, set update_lead_id to the matching id from the pipeline list
-- Write a short 1-sentence reply confirming what you did
-- If no client info, set has_lead=false and reply asking for the client's name`,
+Rules:
+- has_lead = true if a client name is mentioned
+- stage defaults to "new_lead" if not specified
+- reply should confirm what was captured in 1 sentence
+- if no client name, set has_lead=false and reply asking for the name`
+          },
+          { role: 'user', content: lastMessage }
+        ],
+      }),
     })
+
+    if (!oaiRes.ok) {
+      const err = await oaiRes.text()
+      console.error('[pipeline-chat] OpenAI error:', err.slice(0, 200))
+      return NextResponse.json({ error: 'ai_error' }, { status: 500 })
+    }
+
+    const oaiData = await oaiRes.json()
+    const raw = oaiData.choices?.[0]?.message?.content ?? '{}'
+    
+    let extracted: {
+      has_lead?: boolean
+      reply?: string
+      lead_name?: string
+      stage?: string
+      notes?: string
+      update_lead_id?: string
+    } = {}
+
+    try {
+      extracted = JSON.parse(raw)
+    } catch {
+      console.error('[pipeline-chat] JSON parse error:', raw.slice(0, 100))
+      return NextResponse.json({ reply: 'Something went wrong. Try again.', action: null })
+    }
+
+    console.log('[pipeline-chat] extracted:', JSON.stringify(extracted).slice(0, 200))
 
     let actionResult = null
 
-    if (object.has_lead && object.lead_name) {
-      if (object.update_lead_id) {
-        // Update existing lead
+    if (extracted.has_lead && extracted.lead_name) {
+      const stage = VALID_STAGES.includes(extracted.stage ?? '') ? extracted.stage! : 'new_lead'
+
+      if (extracted.update_lead_id) {
         const updates: Record<string, string> = { last_contact: new Date().toISOString() }
-        if (object.stage) updates.stage = object.stage
-        if (object.notes) updates.notes = object.notes
+        if (stage) updates.stage = stage
+        if (extracted.notes) updates.notes = extracted.notes
 
         const { data, error } = await supabase
           .from('pipeline')
           .update(updates)
-          .eq('id', object.update_lead_id)
+          .eq('id', extracted.update_lead_id)
           .eq('agent_id', agentId)
           .select()
           .single()
@@ -80,29 +117,30 @@ Instructions:
         if (!error && data) actionResult = { type: 'updated', lead: data }
         else console.error('[pipeline-chat] update error:', error?.message)
       } else {
-        // Create new lead
         const { data, error } = await supabase
           .from('pipeline')
           .insert({
             agent_id: agentId,
-            lead_name: object.lead_name,
-            stage: object.stage || 'new_lead',
-            notes: object.notes || '',
+            lead_name: extracted.lead_name,
+            stage,
+            notes: extracted.notes || '',
             last_contact: new Date().toISOString(),
           })
           .select()
           .single()
 
-        if (!error && data) actionResult = { type: 'created', lead: data }
-        else console.error('[pipeline-chat] insert error:', error?.message)
+        if (!error && data) {
+          actionResult = { type: 'created', lead: data }
+          console.log('[pipeline-chat] created lead:', extracted.lead_name)
+        } else {
+          console.error('[pipeline-chat] insert error:', error?.message)
+        }
       }
     }
 
-    console.log('[pipeline-chat] has_lead:', object.has_lead, 'action:', actionResult?.type ?? 'none')
-
-    return NextResponse.json({ reply: object.reply, action: actionResult })
+    return NextResponse.json({ reply: extracted.reply ?? 'Got it.', action: actionResult })
   } catch (err) {
-    console.error('[pipeline-chat]', err)
+    console.error('[pipeline-chat] unexpected:', err)
     return NextResponse.json({ error: 'internal_error' }, { status: 500 })
   }
 }
