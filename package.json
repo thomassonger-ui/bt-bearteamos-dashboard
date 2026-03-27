@@ -12,7 +12,7 @@
     "@ai-sdk/openai": "^3.0.48",
     "@supabase/supabase-js": "^2.49.4",
     "ai": "^6.0.140",
-    "next": "15.2.1",
+    "next": "15.3.1",
     "react": "^19",
     "react-dom": "^19"
   },
@@ -22,7 +22,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "15.2.1",
+    "eslint-config-next": "15.3.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
