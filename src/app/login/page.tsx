@@ -7,19 +7,32 @@ import { runEngine } from '@/lib/engine'
 import { logActivity } from '@/lib/queries'
 
 export default function LoginPage() {
-  const [name, setName] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) { setError('Name is required.'); return }
+    if (!password.trim()) { setError('Password is required.'); return }
     setLoading(true)
     setError('')
 
     try {
-      // Phase 1: fetch first (only) agent from DB — no real auth
+      // Validate password server-side — sets bt_session cookie on success
+      const authRes = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      })
+
+      if (!authRes.ok) {
+        setError('Incorrect password.')
+        setLoading(false)
+        return
+      }
+
+      // Fetch agent from DB
       const agent = await getFirstAgent()
       if (!agent) { setError('No agent found in system.'); setLoading(false); return }
 
@@ -31,7 +44,7 @@ export default function LoginPage() {
         outcome: 'neutral',
       })
 
-      // Run engine on login — this is where 24h inactivity check fires
+      // Run engine on login — 24h inactivity check fires here
       await runEngine(agent.id)
 
       // Store agent ID in sessionStorage for pages to use
@@ -68,13 +81,13 @@ export default function LoginPage() {
         <form onSubmit={handleLogin}>
           <div style={{ marginBottom: 16 }}>
             <label style={{ display: 'block', fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
-              Agent Name
+              Password
             </label>
             <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Your name"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter password"
               autoFocus
               style={{
                 width: '100%', padding: '10px 12px', fontSize: 14,
@@ -101,7 +114,7 @@ export default function LoginPage() {
 
         <div style={{ marginTop: 24, fontSize: 11, color: 'var(--bt-text-dim)', textAlign: 'center' }}>
           Bear Team Real Estate · Orlando, FL<br />
-          Phase 2 — Live Database
+          BearTeamOS — Live Database
         </div>
       </div>
     </div>
