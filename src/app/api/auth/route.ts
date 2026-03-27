@@ -1,26 +1,52 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
-export async function POST(request: NextRequest) {
-  const { password } = await request.json();
-
-  const correctPassword = process.env.DASHBOARD_PASSWORD;
-  const sessionToken = process.env.SESSION_TOKEN;
-
-  if (!correctPassword || !sessionToken) {
-    return NextResponse.json({ error: 'Server misconfigured' }, { status: 500 });
+export async function POST(request: Request) {
+  const { username, password } = await request.json();
+  const agentsRaw = process.env.AGENTS || '[]';
+  let agents: { name: string; username: string; password: string; stage?: string }[] = [];
+  
+  try {
+    agents = JSON.parse(agentsRaw);
+  } catch (e) {
+    console.error('Failed to parse AGENTS:', e);
   }
 
-  if (password !== correctPassword) {
-    return NextResponse.json({ error: 'Invalid password' }, { status: 401 });
+  const agent = agents.find(
+    (a) => a.username.toLowerCase() === username.toLowerCase() && a.password === password
+  );
+
+  if (!agent) {
+    return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 });
   }
 
-  const response = NextResponse.json({ success: true });
+  const token = process.env.SESSION_TOKEN || 'bt_session';
+  const isProd = process.env.NODE_ENV === 'production';
+  const maxAge = 60 * 60 * 24 * 7;
+  const stage = agent.stage || 'active';
 
-  response.cookies.set('bt_os_session', sessionToken, {
+  const response = NextResponse.json({ success: true, name: agent.name, stage });
+  
+  response.cookies.set('bt_os_session', token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: isProd,
     sameSite: 'lax',
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    maxAge,
+    path: '/',
+  });
+  
+  response.cookies.set('bt_os_agent', agent.name, {
+    httpOnly: false,
+    secure: isProd,
+    sameSite: 'lax',
+    maxAge,
+    path: '/',
+  });
+  
+  response.cookies.set('bt_os_stage', stage, {
+    httpOnly: false,
+    secure: isProd,
+    sameSite: 'lax',
+    maxAge,
     path: '/',
   });
 
