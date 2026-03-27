@@ -1,4 +1,4 @@
-import { getSupabase } from './getSupabase()'
+import { getSupabase } from './supabase'
 import type { Pipeline } from '@/types'
 
 // ─── DEFAULT AGENT ────────────────────────────────────────────────────────────
