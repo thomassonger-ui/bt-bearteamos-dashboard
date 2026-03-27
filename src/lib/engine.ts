@@ -25,11 +25,11 @@ export async function runEngine(agentId: string): Promise<void> {
   await markOverdueTasks(agentId)
 
   const now = new Date()
-  const { supabase } = await import('./supabase')
+  const { getSupabase } = await import('./getSupabase()')
 
   // ── STREAK CALCULATION ────────────────────────────────────────────────────
   // Fetch current streak values from DB
-  const { data: agentRow } = await supabase
+  const { data: agentRow } = await getSupabase()
     .from('agents')
     .select('inactivity_streak, missed_streak, onboarding_stage')
     .eq('id', agentId)
@@ -51,7 +51,7 @@ export async function runEngine(agentId: string): Promise<void> {
 
   // Calculate missed streak: count missed tasks in last 48h window
   const cutoff48h = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString()
-  const { data: recentMissed } = await supabase
+  const { data: recentMissed } = await getSupabase()
     .from('tasks')
     .select('id')
     .eq('agent_id', agentId)
@@ -174,7 +174,7 @@ export async function runEngine(agentId: string): Promise<void> {
 
   // ── RULE 4: Missed Task Pressure ─────────────────────────────────────────
   // Idempotency: source_rule='retry', source_ref=original_task.id
-  const { data: missedRows } = await supabase
+  const { data: missedRows } = await getSupabase()
     .from('tasks')
     .select('*')
     .eq('agent_id', agentId)
@@ -319,7 +319,7 @@ export async function runEngine(agentId: string): Promise<void> {
   // Clamped 0–100, written once per engine run.
   const cutoff24h = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
 
-  const { data: recentActivity } = await supabase
+  const { data: recentActivity } = await getSupabase()
     .from('activity_log')
     .select('action_type')
     .eq('agent_id', agentId)
@@ -332,7 +332,7 @@ export async function runEngine(agentId: string): Promise<void> {
   const complianceCount = activityEvents.filter((e) => e.action_type === 'compliance_completed').length
 
   // Count missed tasks created in last 24h for scoring
-  const { data: missedFor24h } = await supabase
+  const { data: missedFor24h } = await getSupabase()
     .from('tasks')
     .select('id')
     .eq('agent_id', agentId)
