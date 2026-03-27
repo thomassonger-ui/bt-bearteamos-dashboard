@@ -6,7 +6,6 @@ import { useState, useEffect } from 'react';
 
 const STAGE_PRIORITIES: Record<string, Array<{ id: number; text: string; section: string }>> = {
   'onboarding-30': [
-    // Days 1-30 (18 tasks)
     { id: 1, text: 'Complete broker orientation and office tour', section: 'Getting Started' },
     { id: 2, text: 'Set up MLS account and learn dashboard basics', section: 'Getting Started' },
     { id: 3, text: 'Configure email, CRM, and transaction management tools', section: 'Getting Started' },
@@ -27,7 +26,6 @@ const STAGE_PRIORITIES: Record<string, Array<{ id: number; text: string; section
     { id: 18, text: 'Log all activities in CRM and review with mentor', section: 'Systems' },
   ],
   'onboarding-60': [
-    // Days 30-60 (11 tasks)
     { id: 19, text: 'Complete first transaction from start to closing', section: 'Milestones' },
     { id: 20, text: 'Process first commission payment and verify earnings', section: 'Financial' },
     { id: 21, text: 'Establish buyer database and nurture sequence setup', section: 'Lead Management' },
@@ -41,7 +39,6 @@ const STAGE_PRIORITIES: Record<string, Array<{ id: number; text: string; section
     { id: 29, text: 'Prepare 60-day progress report for Bethanne', section: 'Check-In' },
   ],
   'onboarding-90': [
-    // Days 60-90 (9 tasks)
     { id: 30, text: 'Complete 5 full transactions (buy and/or sell side)', section: 'Production' },
     { id: 31, text: 'Establish personal brand and social media strategy', section: 'Marketing' },
     { id: 32, text: 'Build repeat and referral sources', section: 'Client Relations' },
@@ -53,7 +50,6 @@ const STAGE_PRIORITIES: Record<string, Array<{ id: number; text: string; section
     { id: 38, text: 'Transition to "Active Agent" independent operations', section: 'Graduation' },
   ],
   'active': [
-    // Active agents (6 core responsibilities)
     { id: 39, text: 'Review leads and follow up on hot prospects (daily)', section: 'Daily' },
     { id: 40, text: 'Prepare CMAs and pricing analysis for buyers/sellers', section: 'Production' },
     { id: 41, text: 'Conduct showings and document feedback in CRM', section: 'Production' },
@@ -62,8 +58,6 @@ const STAGE_PRIORITIES: Record<string, Array<{ id: number; text: string; section
     { id: 44, text: 'Track production metrics and prepare monthly reports', section: 'Reporting' },
   ],
 };
-
-// ─── DATA ────────────────────────────────────────────────────────────────────
 
 const CRITICAL_ALERTS = [
   {
@@ -99,22 +93,6 @@ const PIPELINE = [
   { label: 'Commission Pipeline', value: '$94,200', sub: 'Est. gross', status: 'good', icon: '💰' },
 ];
 
-const DAILY_TASKS = [
-  { id: 1, type: 'call', priority: 'urgent', text: 'Call Sara Martinez — expressed urgency, hasn\'t heard back', tag: 'Lead' },
-  { id: 2, type: 'respond', priority: 'urgent', text: 'Respond to Mike Chen — submitted inquiry 3 hrs ago', tag: 'Lead' },
-  { id: 3, type: 'docs', priority: 'high', text: 'Upload HOA docs for 123 Oak St before EOD', tag: 'Compliance' },
-  { id: 4, type: 'appt', priority: 'high', text: 'Confirm showing — 44 Maple Dr @ 3pm with Johnson family', tag: 'Showing' },
-  { id: 5, type: 'task', priority: 'medium', text: 'Send CMA to Johnson family before tomorrow\'s showing', tag: 'Task' },
-  { id: 6, type: 'mls', priority: 'medium', text: 'Review 12 new listings in 32804 matching active buyer criteria', tag: 'MLS' },
-  { id: 7, type: 'task', priority: 'low', text: 'Log last 2 showings into transaction file', tag: 'Admin' },
-];
-
-const SCOUT_RECS = [
-  { priority: 1, action: 'Call Sara Martinez immediately', reason: 'Hot buyer — 72hr window before she goes dark', cta: 'Open Lead' },
-  { priority: 2, action: 'Upload 3 missing compliance docs', reason: 'Closing in 6 days — broker queue takes 24hrs', cta: 'Open Files' },
-  { priority: 3, action: 'Send price reduction alert to buyer list', reason: '4 new price drops in 32819 match 8 active buyers', cta: 'Send Alert' },
-];
-
 const SCOUT_STATS = [
   { label: 'New Leads (24h)', value: '7', color: '#2563EB' },
   { label: 'Hot Prospects', value: '3', color: '#DC2626' },
@@ -133,8 +111,6 @@ const NAV = [
   { icon: 'S', label: 'Scout AI' },
 ];
 
-// ─── PRIORITY TAG ─────────────────────────────────────────────────────────────
-
 function PriorityTag({ p }: { p: string }) {
   const map: Record<string, { bg: string; color: string; label: string }> = {
     urgent: { bg: '#FEF2F2', color: '#DC2626', label: 'URGENT' },
@@ -150,8 +126,6 @@ function PriorityTag({ p }: { p: string }) {
   );
 }
 
-// ─── MAIN ─────────────────────────────────────────────────────────────────────
-
 export default function Dashboard() {
   const [done, setDone] = useState<Record<number, boolean>>({});
   const [agentName, setAgentName] = useState('Agent');
@@ -162,20 +136,14 @@ export default function Dashboard() {
   const toggle = (id: number) => setDone(prev => ({ ...prev, [id]: !prev[id] }));
   const completedCount = Object.values(done).filter(Boolean).length;
 
-  // Read cookies on mount
   useEffect(() => {
-    const getCookie = (name: string) => {
-      const match = document.cookie.match(new RegExp(`${name}=([^;]+)`));
-      return match ? decodeURIComponent(match[1]) : null;
-    };
+    // Try to read from localStorage first (set by auth route)
+    const storedStage = typeof window !== 'undefined' ? localStorage.getItem('bt_os_stage') : null;
+    const storedAgent = typeof window !== 'undefined' ? localStorage.getItem('bt_os_agent') : null;
 
-    const nameFromCookie = getCookie('bt_os_agent');
-    const stageFromCookie = getCookie('bt_os_stage') || 'active';
-
-    if (nameFromCookie) {
-      setAgentName(nameFromCookie);
-      // Extract initials: "Tom Songer" → "TS"
-      const initials = nameFromCookie
+    if (storedAgent) {
+      setAgentName(storedAgent);
+      const initials = storedAgent
         .split(' ')
         .map(part => part[0])
         .join('')
@@ -183,11 +151,11 @@ export default function Dashboard() {
       setAgentInitials(initials);
     }
 
-    setStage(stageFromCookie);
-    setStageTasks(STAGE_PRIORITIES[stageFromCookie] || STAGE_PRIORITIES['active']);
+    const finalStage = storedStage || 'active';
+    setStage(finalStage);
+    setStageTasks(STAGE_PRIORITIES[finalStage] || STAGE_PRIORITIES['active']);
   }, []);
 
-  // Stage badge
   const stageBadgeText = {
     'onboarding-30': 'Days 1-30',
     'onboarding-60': 'Days 30-60',
@@ -202,22 +170,18 @@ export default function Dashboard() {
       background: '#F1F4F8', color: '#1E293B',
     }}>
 
-      {/* ── TOP NAVBAR ─────────────────────────────────────────────────────── */}
       <header style={{
         height: 52, background: '#1B2E4B', display: 'flex', alignItems: 'center',
         justifyContent: 'space-between', padding: '0 20px', position: 'sticky',
         top: 0, zIndex: 200, flexShrink: 0, boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
       }}>
-        {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 28, height: 28, background: '#E8A020', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11, color: '#fff' }}>BT</div>
           <span style={{ fontWeight: 700, fontSize: 15, color: '#fff', letterSpacing: '-0.2px' }}>BearTeam<span style={{ color: '#E8A020' }}>OS</span></span>
         </div>
 
-        {/* Center title */}
         <span style={{ fontWeight: 600, fontSize: 14, color: '#CBD5E1', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Dashboard</span>
 
-        {/* Right */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div style={{ position: 'relative', cursor: 'pointer' }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
@@ -231,10 +195,8 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* ── BODY ───────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
-        {/* ── SIDEBAR ──────────────────────────────────────────────────── */}
         <nav style={{
           width: 200, background: '#fff', borderRight: '1px solid #DDE3EC',
           padding: '10px 0', flexShrink: 0, overflowY: 'auto',
@@ -273,10 +235,8 @@ export default function Dashboard() {
           </div>
         </nav>
 
-        {/* ── MAIN ─────────────────────────────────────────────────────── */}
         <main style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
 
-          {/* ── WELCOME BANNER ────────────────────────────────────────── */}
           <section style={{ background: 'linear-gradient(135deg, #1B2E4B 0%, #2D4A7B 100%)', borderRadius: 8, padding: '16px 20px', color: '#fff' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
@@ -289,7 +249,6 @@ export default function Dashboard() {
             </div>
           </section>
 
-          {/* ── TODAY'S PRIORITIES ────────────────────────────────────── */}
           <section style={{ background: '#fff', border: '1px solid #DDE3EC', borderRadius: 7, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ padding: '12px 16px', borderBottom: '1px solid #E8EDF4', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
@@ -301,7 +260,6 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Progress bar */}
             <div style={{ height: 3, background: '#E8EDF4', flexShrink: 0 }}>
               <div style={{ height: '100%', background: '#2563EB', width: `${(completedCount / stageTasks.length) * 100}%`, transition: 'width 0.3s' }} />
             </div>
@@ -314,7 +272,6 @@ export default function Dashboard() {
                   cursor: 'pointer', background: done[task.id] ? '#FAFBFC' : '#fff',
                   transition: 'background 0.15s',
                 }}>
-                  {/* Checkbox */}
                   <div style={{
                     width: 18, height: 18, borderRadius: 4, marginTop: 1, flexShrink: 0,
                     border: done[task.id] ? 'none' : '1.5px solid #CBD5E1',
@@ -323,11 +280,9 @@ export default function Dashboard() {
                   }}>
                     {done[task.id] && <span style={{ color: '#fff', fontSize: 11, fontWeight: 800 }}>✓</span>}
                   </div>
-                  {/* Content */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <span style={{ fontSize: 13, color: done[task.id] ? '#94A3B8' : '#1E293B', textDecoration: done[task.id] ? 'line-through' : 'none', lineHeight: 1.4 }}>{task.text}</span>
                   </div>
-                  {/* Tag */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                     <span style={{ fontSize: 10, color: '#64748B', background: '#F1F5F9', padding: '2px 6px', borderRadius: 4, whiteSpace: 'nowrap' }}>{task.section}</span>
                   </div>
@@ -336,7 +291,6 @@ export default function Dashboard() {
             </div>
           </section>
 
-          {/* ── CRITICAL ALERTS ──────────────────────────────────────── */}
           <section>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: '#DC2626', textTransform: 'uppercase', letterSpacing: '0.8px' }}>Critical Alerts</span>

@@ -24,7 +24,12 @@ export async function POST(request: Request) {
   const maxAge = 60 * 60 * 24 * 7;
   const stage = agent.stage || 'active';
 
-  const response = NextResponse.json({ success: true, name: agent.name, stage });
+  const response = NextResponse.json({ 
+    success: true, 
+    name: agent.name, 
+    stage,
+    script: `localStorage.setItem('bt_os_agent', '${agent.name}'); localStorage.setItem('bt_os_stage', '${stage}');`
+  });
   
   response.cookies.set('bt_os_session', token, {
     httpOnly: true,

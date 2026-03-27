@@ -25,7 +25,11 @@ function LoginForm() {
       });
 
       if (res.ok) {
-        // Wait 500ms to ensure cookies are set before redirecting
+        const data = await res.json();
+        // Store in localStorage so dashboard can read it
+        if (data.name) localStorage.setItem('bt_os_agent', data.name);
+        if (data.stage) localStorage.setItem('bt_os_stage', data.stage);
+        
         setTimeout(() => {
           router.push(from);
           router.refresh();
@@ -50,7 +54,6 @@ function LoginForm() {
       justifyContent: 'center',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     }}>
-      {/* Card */}
       <div style={{
         background: '#fff',
         borderRadius: 12,
@@ -60,8 +63,6 @@ function LoginForm() {
         boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
         border: '1px solid rgba(255,255,255,0.1)',
       }}>
-
-        {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 8 }}>
           <div style={{
             width: 38, height: 38, background: '#1B2E4B', borderRadius: 8,
@@ -73,13 +74,12 @@ function LoginForm() {
           </span>
         </div>
 
-        {/* Gold divider */}
         <div style={{ width: 40, height: 3, background: '#E8A020', borderRadius: 2, margin: '14px auto 22px' }} />
 
         <h1 style={{ fontSize: 16, fontWeight: 700, color: '#1B2E4B', marginBottom: 4, textAlign: 'center' }}>
           Agent Dashboard
         </h1>
-        <p style={{ fontSize: 13, color: '#64748B', textAlign: 'center', marginBottom: 28, margin: '0 0 28px' }}>
+        <p style={{ fontSize: 13, color: '#64748B', textAlign: 'center', marginBottom: 28 }}>
           Enter your credentials to continue
         </p>
 
