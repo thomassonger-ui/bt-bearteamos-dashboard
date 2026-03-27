@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { getFirstAgent } from '@/lib/queries'
+import { getAgentByUsername, getFirstAgent } from '@/lib/queries'
 import { runEngine } from '@/lib/engine'
 import { logActivity } from '@/lib/queries'
 
@@ -33,11 +33,15 @@ export default function LoginPage() {
         return
       }
 
-      // Auth succeeded — store agent info and redirect immediately
+      // Auth succeeded — store username and redirect immediately
       // Post-auth steps (engine, logging) run non-blocking so they can't gate access
+      const loggedInUsername = username.toLowerCase().trim()
+      sessionStorage.setItem('bt_username', loggedInUsername)
+
       void (async () => {
         try {
-          const agent = await getFirstAgent()
+          // Look up agent by username — fallback to first agent for tom/admin
+          const agent = await getAgentByUsername(loggedInUsername) ?? await getFirstAgent()
           if (!agent) return
 
           sessionStorage.setItem('bt_agent_id', agent.id)
