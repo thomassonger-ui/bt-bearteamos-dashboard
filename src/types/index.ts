@@ -5,6 +5,7 @@ export interface Agent {
   name: string
   email: string
   phone?: string
+  username?: string           // BearTeamOS login username
   stage: string               // existing column: 'Onboarding' | 'Active' etc
   onboarding_stage: number    // days into onboarding (0–90+)
   last_active: string         // ISO timestamp
