@@ -9,6 +9,7 @@ const supabase = createClient(
 )
 
 const VALID_STAGES = ['new_lead','contacted','appointment_set','under_contract','closed']
+const VALID_TYPES  = ['buyer','seller','rental']
 
 export async function POST(req: Request) {
   try {
@@ -19,13 +20,15 @@ export async function POST(req: Request) {
 
     const { data: pipeline } = await supabase
       .from('pipeline')
-      .select('id, lead_name, stage')
+      .select('id, lead_name, stage, lead_type')
       .eq('agent_id', agentId)
       .order('last_contact', { ascending: false })
       .limit(20)
 
     const pipelineList = pipeline?.length
-      ? pipeline.map((l: {id: string; lead_name: string; stage: string}) => `- ${l.lead_name} [${l.stage}] id:${l.id}`).join('\n')
+      ? pipeline.map((l: {id: string; lead_name: string; stage: string; lead_type?: string}) =>
+          `- ${l.lead_name} [${l.stage}${l.lead_type ? `, ${l.lead_type}` : ''}] id:${l.id}`
+        ).join('\n')
       : 'None yet.'
 
     const lastMessage = messages[messages.length - 1]?.content ?? ''
@@ -49,16 +52,24 @@ ${pipelineList}
 
 Return this exact JSON structure:
 {
-  "action_type": "create_lead|update_lead|delete_lead|none",
-  "reply": "one sentence confirmation",
+  "action_type": "create_lead|update_lead|delete_lead|ask_type|none",
+  "reply": "one sentence response",
   "lead_name": "Full Name or null",
+  "lead_type": "buyer|seller|rental or null",
   "stage": "new_lead|contacted|appointment_set|under_contract|closed or null",
   "notes": "any details or null",
   "target_lead_id": "existing lead id if updating or deleting, otherwise null"
 }
 
-Stage mapping rules — when the user says any of these, set the stage accordingly:
-- "set appointment", "scheduled a showing", "meeting set", "appointment for" → stage = "appointment_set", notes should include the date/time
+Lead type rules (CRITICAL):
+- Every new lead MUST have a lead_type: buyer, seller, or rental
+- If a name is given but no type is mentioned and it's a new lead → set action_type="ask_type" and reply asking "Is [name] a buyer, seller, or rental lead?"
+- If the message contains words like "buyer", "buying", "looking to buy", "wants to buy" → lead_type = "buyer"
+- If it contains "seller", "selling", "listing", "wants to sell" → lead_type = "seller"
+- If it contains "rental", "renting", "tenant", "looking to rent" → lead_type = "rental"
+
+Stage mapping rules:
+- "set appointment", "scheduled a showing", "meeting set", "appointment for" → stage = "appointment_set", notes = date/time
 - "called", "texted", "reached out", "sent email", "followed up" → stage = "contacted"
 - "under contract", "in contract", "signed" → stage = "under_contract"
 - "closed", "closing", "settlement" → stage = "closed"
@@ -66,13 +77,13 @@ Stage mapping rules — when the user says any of these, set the stage according
 
 Action type rules:
 - action_type = "delete_lead" if user says remove/delete/take off a client
-- action_type = "update_lead" if updating an existing client already in the pipeline list
-- action_type = "create_lead" if adding a brand new client not in the pipeline
+- action_type = "update_lead" if updating an existing client already in the pipeline list (appointments count as updates)
+- action_type = "create_lead" if adding a brand new client with a known lead_type
+- action_type = "ask_type" if name is given but lead_type is unknown for a new lead
 - action_type = "none" only if there is truly no client action at all
 
-For appointments/scheduling: this IS an update — set action_type="update_lead", stage="appointment_set", and put the appointment details in notes.
-For delete: match the name in the pipeline list to get the correct target_lead_id.
-reply should confirm what was done in 1 sentence, including the stage change.`
+For delete: match the name in the pipeline list to get target_lead_id.
+reply must be one sentence confirming what was done or asking the clarifying question.`
           },
           { role: 'user', content: lastMessage }
         ],
@@ -92,6 +103,7 @@ reply should confirm what was done in 1 sentence, including the stage change.`
       action_type?: string
       reply?: string
       lead_name?: string
+      lead_type?: string
       stage?: string
       notes?: string
       target_lead_id?: string
@@ -107,6 +119,11 @@ reply should confirm what was done in 1 sentence, including the stage change.`
     console.log('[pipeline-chat] extracted:', JSON.stringify(extracted).slice(0, 200))
 
     let actionResult = null
+
+    if (extracted.action_type === 'ask_type') {
+      // Just return the clarifying question — no DB action
+      return NextResponse.json({ reply: extracted.reply ?? `Is ${extracted.lead_name} a buyer, seller, or rental lead?`, action: null })
+    }
 
     if (extracted.action_type === 'delete_lead' && extracted.target_lead_id) {
       const { error } = await supabase
@@ -126,6 +143,7 @@ reply should confirm what was done in 1 sentence, including the stage change.`
       const updates: Record<string, string> = { last_contact: new Date().toISOString() }
       if (stage) updates.stage = stage
       if (extracted.notes) updates.notes = extracted.notes
+      if (extracted.lead_type && VALID_TYPES.includes(extracted.lead_type)) updates.lead_type = extracted.lead_type
 
       const { data, error } = await supabase
         .from('pipeline')
@@ -139,6 +157,7 @@ reply should confirm what was done in 1 sentence, including the stage change.`
       else console.error('[pipeline-chat] update error:', error?.message)
     } else if (extracted.action_type === 'create_lead' && extracted.lead_name) {
       const stage = VALID_STAGES.includes(extracted.stage ?? '') ? extracted.stage! : 'new_lead'
+      const lead_type = VALID_TYPES.includes(extracted.lead_type ?? '') ? extracted.lead_type! : null
 
       const { data, error } = await supabase
         .from('pipeline')
@@ -146,6 +165,7 @@ reply should confirm what was done in 1 sentence, including the stage change.`
           agent_id: agentId,
           lead_name: extracted.lead_name,
           stage,
+          lead_type,
           notes: extracted.notes || '',
           last_contact: new Date().toISOString(),
         })
@@ -154,7 +174,7 @@ reply should confirm what was done in 1 sentence, including the stage change.`
 
       if (!error && data) {
         actionResult = { type: 'created', lead: data }
-        console.log('[pipeline-chat] created lead:', extracted.lead_name)
+        console.log('[pipeline-chat] created lead:', extracted.lead_name, lead_type)
       } else {
         console.error('[pipeline-chat] insert error:', error?.message)
       }
