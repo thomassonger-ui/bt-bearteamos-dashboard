@@ -23,6 +23,8 @@ export interface Task {
   due_date: string            // ISO timestamp
   completed_at?: string
   created_at: string
+  source_rule?: string        // which engine rule created this task
+  source_ref?: string         // entity that triggered it (lead_id, date, task_id)
 }
 
 export interface ActivityLog {
