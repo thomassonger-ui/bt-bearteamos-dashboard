@@ -1,6 +1,12 @@
 import { getAllPipeline, createTask, ruleTaskExists, logActivity } from '@/lib/queries'
 import type { Pipeline } from '@/types'
 
+// ─── LOGGING HELPER ───────────────────────────────────────────────────────────
+
+function logEvent(label: string, data?: unknown) {
+  console.log(`[${label}]`, data ?? '')
+}
+
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
 const DEFAULT_AGENT_ID = 'e53282c8-8b69-437d-9c32-503b5e87b7f0'
@@ -68,7 +74,24 @@ async function runRule(
 
 // ─── HANDLER ─────────────────────────────────────────────────────────────────
 
-export async function GET() {
+export async function GET(req: Request) {
+  // ── Cron safety — block manual calls in production ──────────────────────────
+  const isCron = req.headers.get('user-agent')?.includes('vercel-cron')
+  if (!isCron && process.env.NODE_ENV === 'production') {
+    logEvent('cron_blocked', { reason: 'non-cron caller in production' })
+    return new Response('forbidden', { status: 403 })
+  }
+
+  // ── Auth ────────────────────────────────────────────────────────────────────
+  const authHeader = req.headers.get('authorization')
+  if (authHeader !== `Bearer ${process.env.INTERNAL_API_KEY}`) {
+    logEvent('cron_unauthorized')
+    return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
+  }
+
+  try {
+  logEvent('cron_start', { time: new Date().toISOString() })
+
   const leads = await getAllPipeline()
 
   const results: RuleResult[] = []
@@ -114,6 +137,12 @@ export async function GET() {
   const acted = results.filter((r) => r.acted)
   const skipped = results.filter((r) => !r.acted)
 
+  logEvent('cron_complete', {
+    processed: leads.length,
+    tasks_created: acted.length,
+    duplicates_skipped: skipped.length,
+  })
+
   return Response.json({
     ok: true,
     processed: leads.length,
@@ -121,4 +150,9 @@ export async function GET() {
     duplicates_skipped: skipped.length,
     actions: acted,
   })
+
+  } catch (err) {
+    logEvent('cron_error', err)
+    return new Response(JSON.stringify({ error: 'internal_error' }), { status: 500 })
+  }
 }
