@@ -32,6 +32,22 @@ export async function updateAgentLastActive(agentId: string): Promise<void> {
   if (error) console.error('updateAgentLastActive:', error.message)
 }
 
+/**
+ * Persist inactivity_streak and missed_streak back to DB.
+ * Called by engine after calculating streak values each run.
+ */
+export async function updateAgentStreaks(
+  agentId: string,
+  inactivityStreak: number,
+  missedStreak: number
+): Promise<void> {
+  const { error } = await supabase
+    .from('agents')
+    .update({ inactivity_streak: inactivityStreak, missed_streak: missedStreak })
+    .eq('id', agentId)
+  if (error) console.error('updateAgentStreaks:', error.message)
+}
+
 // ─── TASKS ────────────────────────────────────────────────────────────────────
 
 export async function getTasks(agentId: string): Promise<Task[]> {
