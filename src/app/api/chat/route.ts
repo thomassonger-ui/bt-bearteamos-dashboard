@@ -1,6 +1,7 @@
 import { openai } from '@ai-sdk/openai'
 import { streamText } from 'ai'
 import { getSection } from '@/lib/prompts'
+import { saveMessage, getRecentMessages } from '@/lib/memory'
 
 // ─── BOOKING LINK ─────────────────────────────────────────────────────────────
 
@@ -106,43 +107,90 @@ When presenting a link:
 `
 
 // ─── CLOSE FALLBACK ───────────────────────────────────────────────────────────
-// Streamed response cannot be inspected before delivery.
-// Fallback is appended via a TransformStream that buffers the full response,
-// checks for a booking signal, and appends the link if absent.
-// Only activates when stage === CLOSE.
+// Buffers the full stream, checks for booking signal, appends fallback if absent.
+// Also captures the full assistant text for memory persistence.
 
-function buildCloseFallbackStream(
-  source: ReadableStream<Uint8Array>
+function buildCloseGuardStream(
+  source: ReadableStream<Uint8Array>,
+  onComplete: (fullText: string) => void
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder()
   const decoder = new TextDecoder()
   let buffer = ''
 
-  const transform = new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      const text = decoder.decode(chunk, { stream: true })
-      buffer += text
-      controller.enqueue(chunk)
-    },
-    flush(controller) {
-      const hasLink = buffer.includes('http')
-      const hasNextStep = buffer.includes('next 30 days')
-      if (!hasLink && !hasNextStep) {
-        const fallback = `\n\nLet's walk through it live:\n${BOOKING_URL}`
-        controller.enqueue(encoder.encode(fallback))
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      const reader = source.getReader()
+
+      async function pump() {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) {
+            // Append fallback if CLOSE response has no booking signal
+            const hasLink = buffer.includes('http')
+            const hasNextStep = buffer.includes('next 30 days')
+            if (!hasLink && !hasNextStep) {
+              const fallback = `\n\nLet's walk through it live:\n${BOOKING_URL}`
+              buffer += fallback
+              controller.enqueue(encoder.encode(fallback))
+            }
+            onComplete(buffer)
+            controller.close()
+            return
+          }
+          const text = decoder.decode(value, { stream: true })
+          buffer += text
+          controller.enqueue(value)
+        }
       }
+
+      pump().catch((err) => controller.error(err))
     },
   })
+}
 
-  return source.pipeThrough(transform)
+// Standard capture stream for non-CLOSE stages — just captures text for memory.
+function buildCaptureStream(
+  source: ReadableStream<Uint8Array>,
+  onComplete: (fullText: string) => void
+): ReadableStream<Uint8Array> {
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      const reader = source.getReader()
+
+      async function pump() {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) {
+            onComplete(buffer)
+            controller.close()
+            return
+          }
+          buffer += decoder.decode(value, { stream: true })
+          controller.enqueue(value)
+        }
+      }
+
+      pump().catch((err) => controller.error(err))
+    },
+  })
 }
 
 // ─── HANDLER ─────────────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
-  const { messages } = await req.json()
+  const body = await req.json()
+  const { messages, session_id, agent_id } = body
+
+  // ── Load memory ────────────────────────────────────────────────────────────
+  // Retrieve last 10 messages for this session to inject as context.
+  const memory = session_id ? await getRecentMessages(session_id, 10) : []
 
   // ── Stage resolution ───────────────────────────────────────────────────────
+  // Count is based on current messages only (not memory) to preserve stage logic.
   const step = messages.length
 
   const lastMessage = messages[messages.length - 1]?.content?.toLowerCase() || ''
@@ -184,7 +232,7 @@ export async function POST(req: Request) {
 
   const stageInstruction = stageInstructionMap[stage]
 
-  // ── Build per-request system prompt ───────────────────────────────────────
+  // ── Build system prompt ────────────────────────────────────────────────────
   const systemPrompt = `
 ${basePrompt}
 
@@ -199,27 +247,54 @@ INSTRUCTION: ${stageInstruction}
 =======================================================
 `.trim()
 
+  // ── Build message stack ────────────────────────────────────────────────────
+  // Order: system → memory (historical) → current messages (latest input)
+  const messageStack = [
+    { role: 'system' as const, content: systemPrompt },
+    ...memory,
+    ...messages,
+  ]
+
+  // ── Save user message ──────────────────────────────────────────────────────
+  const userContent = messages[messages.length - 1]?.content ?? ''
+  if (session_id && userContent) {
+    await saveMessage({
+      agentId: agent_id ?? null,
+      sessionId: session_id,
+      role: 'user',
+      content: userContent,
+    })
+  }
+
+  // ── Stream response ────────────────────────────────────────────────────────
   const result = await streamText({
     model: openai('gpt-4o-mini'),
-    messages: [
-      {
-        role: 'system',
-        content: systemPrompt,
-      },
-      ...messages,
-    ],
+    messages: messageStack,
   })
 
   const baseResponse = result.toTextStreamResponse()
 
-  // ── Close guard: append fallback if response lacks booking signal ──────────
-  if (stage === 'CLOSE' && baseResponse.body) {
-    const guardedStream = buildCloseFallbackStream(baseResponse.body)
-    return new Response(guardedStream, {
-      headers: baseResponse.headers,
-      status: baseResponse.status,
-    })
+  if (!baseResponse.body) return baseResponse
+
+  // ── Wrap stream to capture assistant text + enforce CLOSE guard ────────────
+  const saveAssistant = (fullText: string) => {
+    if (session_id && fullText) {
+      saveMessage({
+        agentId: agent_id ?? null,
+        sessionId: session_id,
+        role: 'assistant',
+        content: fullText,
+      }).catch((err) => console.error('[memory] save assistant:', err))
+    }
   }
 
-  return baseResponse
+  const guardedStream =
+    stage === 'CLOSE'
+      ? buildCloseGuardStream(baseResponse.body, saveAssistant)
+      : buildCaptureStream(baseResponse.body, saveAssistant)
+
+  return new Response(guardedStream, {
+    headers: baseResponse.headers,
+    status: baseResponse.status,
+  })
 }
