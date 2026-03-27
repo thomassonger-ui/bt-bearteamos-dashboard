@@ -24,6 +24,16 @@ export async function getFirstAgent(): Promise<Agent | null> {
   return data as Agent
 }
 
+export async function getAgentByUsername(username: string): Promise<Agent | null> {
+  const { data, error } = await getSupabase()
+    .from('agents')
+    .select('*')
+    .eq('username', username.toLowerCase().trim())
+    .single()
+  if (error) { console.error('getAgentByUsername:', error.message); return null }
+  return data as Agent
+}
+
 export async function updateAgentLastActive(agentId: string): Promise<void> {
   const { error } = await getSupabase()
     .from('agents')
