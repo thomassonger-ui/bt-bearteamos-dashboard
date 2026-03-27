@@ -78,7 +78,7 @@ export async function getTasks(agentId: string): Promise<Task[]> {
 export async function createTask(task: Omit<Task, 'id' | 'created_at'>): Promise<Task | null> {
   const { data, error } = await getSupabase()
     .from('tasks')
-    .insert(task)
+    .insert(task as any)
     .select()
     .single()
   // 23505 = unique_violation — expected when idempotency constraint fires, not an error
@@ -194,7 +194,7 @@ export async function getActivityLog(agentId: string, limit = 50): Promise<Activ
 }
 
 export async function logActivity(entry: Omit<ActivityLog, 'id' | 'created_at'>): Promise<void> {
-  const { error } = await getSupabase().from('activity_log').insert(entry)
+  const { error } = await getSupabase().from('activity_log').insert(entry as any)
   if (error) console.error('logActivity:', error.message)
 }
 
