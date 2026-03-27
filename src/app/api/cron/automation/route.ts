@@ -82,13 +82,6 @@ export async function GET(req: Request) {
     return new Response('forbidden', { status: 403 })
   }
 
-  // ── Auth ────────────────────────────────────────────────────────────────────
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.INTERNAL_API_KEY}`) {
-    logEvent('cron_unauthorized')
-    return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
-  }
-
   try {
   logEvent('cron_start', { time: new Date().toISOString() })
 
