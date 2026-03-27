@@ -50,19 +50,23 @@ ${pipelineList}
 
 Return this exact JSON structure:
 {
-  "has_lead": true/false,
+  "action_type": "create_lead|update_lead|delete_lead|none",
   "reply": "one sentence confirmation",
   "lead_name": "Full Name or null",
   "stage": "new_lead|contacted|appointment_set|under_contract|closed or null",
   "notes": "any details or null",
-  "update_lead_id": "existing lead id if updating, otherwise null"
+  "target_lead_id": "existing lead id if updating or deleting, otherwise null"
 }
 
 Rules:
-- has_lead = true if a client name is mentioned
-- stage defaults to "new_lead" if not specified
-- reply should confirm what was captured in 1 sentence
-- if no client name, set has_lead=false and reply asking for the name`
+- action_type = "delete_lead" if user says remove/delete/take off/get rid of a client name
+- action_type = "update_lead" if updating an existing client already in the pipeline list
+- action_type = "create_lead" if adding a new client
+- action_type = "none" if no client action is needed
+- stage defaults to "new_lead" if not specified for create
+- reply should confirm what was done in 1 sentence
+- for delete_lead: match the name in the pipeline list to get the correct target_lead_id
+- if action is delete but name not found, set action_type="none" and explain in reply`
           },
           { role: 'user', content: lastMessage }
         ],
@@ -79,12 +83,12 @@ Rules:
     const raw = oaiData.choices?.[0]?.message?.content ?? '{}'
     
     let extracted: {
-      has_lead?: boolean
+      action_type?: string
       reply?: string
       lead_name?: string
       stage?: string
       notes?: string
-      update_lead_id?: string
+      target_lead_id?: string
     } = {}
 
     try {
@@ -98,43 +102,55 @@ Rules:
 
     let actionResult = null
 
-    if (extracted.has_lead && extracted.lead_name) {
+    if (extracted.action_type === 'delete_lead' && extracted.target_lead_id) {
+      const { error } = await supabase
+        .from('pipeline')
+        .delete()
+        .eq('id', extracted.target_lead_id)
+        .eq('agent_id', agentId)
+
+      if (!error) {
+        actionResult = { type: 'deleted', lead_id: extracted.target_lead_id, lead_name: extracted.lead_name }
+        console.log('[pipeline-chat] deleted lead:', extracted.lead_name)
+      } else {
+        console.error('[pipeline-chat] delete error:', error?.message)
+      }
+    } else if (extracted.action_type === 'update_lead' && extracted.target_lead_id) {
+      const stage = VALID_STAGES.includes(extracted.stage ?? '') ? extracted.stage! : undefined
+      const updates: Record<string, string> = { last_contact: new Date().toISOString() }
+      if (stage) updates.stage = stage
+      if (extracted.notes) updates.notes = extracted.notes
+
+      const { data, error } = await supabase
+        .from('pipeline')
+        .update(updates)
+        .eq('id', extracted.target_lead_id)
+        .eq('agent_id', agentId)
+        .select()
+        .single()
+
+      if (!error && data) actionResult = { type: 'updated', lead: data }
+      else console.error('[pipeline-chat] update error:', error?.message)
+    } else if (extracted.action_type === 'create_lead' && extracted.lead_name) {
       const stage = VALID_STAGES.includes(extracted.stage ?? '') ? extracted.stage! : 'new_lead'
 
-      if (extracted.update_lead_id) {
-        const updates: Record<string, string> = { last_contact: new Date().toISOString() }
-        if (stage) updates.stage = stage
-        if (extracted.notes) updates.notes = extracted.notes
+      const { data, error } = await supabase
+        .from('pipeline')
+        .insert({
+          agent_id: agentId,
+          lead_name: extracted.lead_name,
+          stage,
+          notes: extracted.notes || '',
+          last_contact: new Date().toISOString(),
+        })
+        .select()
+        .single()
 
-        const { data, error } = await supabase
-          .from('pipeline')
-          .update(updates)
-          .eq('id', extracted.update_lead_id)
-          .eq('agent_id', agentId)
-          .select()
-          .single()
-
-        if (!error && data) actionResult = { type: 'updated', lead: data }
-        else console.error('[pipeline-chat] update error:', error?.message)
+      if (!error && data) {
+        actionResult = { type: 'created', lead: data }
+        console.log('[pipeline-chat] created lead:', extracted.lead_name)
       } else {
-        const { data, error } = await supabase
-          .from('pipeline')
-          .insert({
-            agent_id: agentId,
-            lead_name: extracted.lead_name,
-            stage,
-            notes: extracted.notes || '',
-            last_contact: new Date().toISOString(),
-          })
-          .select()
-          .single()
-
-        if (!error && data) {
-          actionResult = { type: 'created', lead: data }
-          console.log('[pipeline-chat] created lead:', extracted.lead_name)
-        } else {
-          console.error('[pipeline-chat] insert error:', error?.message)
-        }
+        console.error('[pipeline-chat] insert error:', error?.message)
       }
     }
 
