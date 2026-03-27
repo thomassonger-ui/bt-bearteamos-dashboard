@@ -4,12 +4,27 @@ export async function POST(req: Request) {
   try {
     const { username, password } = await req.json()
 
-    if (
-      !username || !password ||
-      username.toLowerCase().trim() !== 'tom' ||
-      password !== process.env.DASHBOARD_PASSWORD
-    ) {
-      return NextResponse.json({ error: 'invalid_password' }, { status: 401 })
+    // Validate against AGENTS env var: JSON array of {name, username, password, stage}
+    const agentsRaw = process.env.AGENTS
+    if (!agentsRaw) {
+      return NextResponse.json({ error: 'server_misconfigured' }, { status: 500 })
+    }
+
+    let agents: { username: string; password: string }[]
+    try {
+      agents = JSON.parse(agentsRaw)
+    } catch {
+      return NextResponse.json({ error: 'server_misconfigured' }, { status: 500 })
+    }
+
+    const match = agents.find(
+      (a) =>
+        a.username?.toLowerCase().trim() === username?.toLowerCase().trim() &&
+        a.password === password
+    )
+
+    if (!match) {
+      return NextResponse.json({ error: 'invalid_credentials' }, { status: 401 })
     }
 
     const token = process.env.SESSION_TOKEN
