@@ -9,10 +9,12 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.48",
+    "@supabase/supabase-js": "^2.49.4",
+    "ai": "^6.0.140",
     "next": "15.2.1",
     "react": "^19",
-    "react-dom": "^19",
-    "@supabase/supabase-js": "^2.49.4"
+    "react-dom": "^19"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
