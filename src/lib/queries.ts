@@ -50,8 +50,78 @@ export async function createTask(task: Omit<Task, 'id' | 'created_at'>): Promise
     .insert(task)
     .select()
     .single()
-  if (error) { console.error('createTask:', error.message); return null }
+  // 23505 = unique_violation — expected when idempotency constraint fires, not an error
+  if (error) {
+    if (error.code === '23505') return null // duplicate blocked by DB constraint — silent
+    console.error('createTask:', error.message)
+    return null
+  }
   return data as Task
+}
+
+/**
+ * Check if a rule-generated task already exists (active or completed).
+ * Used by engine for idempotency before attempting insert.
+ */
+export async function ruleTaskExists(
+  agentId: string,
+  sourceRule: string,
+  sourceRef: string
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('tasks')
+    .select('id')
+    .eq('agent_id', agentId)
+    .eq('source_rule', sourceRule)
+    .eq('source_ref', sourceRef)
+    .limit(1)
+  if (error) { console.error('ruleTaskExists:', error.message); return false }
+  return (data?.length ?? 0) > 0
+}
+
+/**
+ * Count pending onboarding tasks for Rule 3.
+ */
+export async function countPendingOnboardingTasks(agentId: string): Promise<number> {
+  const { data, error } = await supabase
+    .from('tasks')
+    .select('id')
+    .eq('agent_id', agentId)
+    .eq('source_rule', 'onboarding')
+    .in('status', ['pending', 'overdue'])
+  if (error) { console.error('countPendingOnboardingTasks:', error.message); return 0 }
+  return data?.length ?? 0
+}
+
+/**
+ * Delete exact duplicate tasks (same agent_id + title + status = pending),
+ * keeping the earliest created_at. Safety pass at engine start.
+ */
+export async function deduplicateTasks(agentId: string): Promise<void> {
+  // Fetch all pending/overdue tasks for this agent
+  const { data, error } = await supabase
+    .from('tasks')
+    .select('id, title, status, created_at')
+    .eq('agent_id', agentId)
+    .in('status', ['pending', 'overdue'])
+    .order('created_at', { ascending: true })
+  if (error || !data) return
+
+  // Group by title — keep first, delete rest
+  const seen = new Map<string, string>() // title → id to keep
+  const toDelete: string[] = []
+  for (const row of data) {
+    if (seen.has(row.title)) {
+      toDelete.push(row.id)
+    } else {
+      seen.set(row.title, row.id)
+    }
+  }
+
+  if (toDelete.length > 0) {
+    await supabase.from('tasks').delete().in('id', toDelete)
+    console.log(`[engine] Deduplication: removed ${toDelete.length} duplicate task(s)`)
+  }
 }
 
 export async function updateTaskStatus(
