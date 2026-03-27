@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { getSupabase } from './getSupabase()'
 import type { Pipeline } from '@/types'
 
 // ─── DEFAULT AGENT ────────────────────────────────────────────────────────────
@@ -14,7 +14,7 @@ export const DEFAULT_AGENT_ID = 'e53282c8-8b69-437d-9c32-503b5e87b7f0'
 
 export async function resolveLeadFromSession(sessionId: string): Promise<Pipeline> {
   // 1. Find existing row
-  const { data: existing, error: findError } = await supabase
+  const { data: existing, error: findError } = await getSupabase()
     .from('pipeline')
     .select('*')
     .eq('scout_session_id', sessionId)
@@ -27,7 +27,7 @@ export async function resolveLeadFromSession(sessionId: string): Promise<Pipelin
 
   // 2. Not found — create new pipeline row for this session
   const now = new Date().toISOString()
-  const { data: created, error: createError } = await supabase
+  const { data: created, error: createError } = await getSupabase()
     .from('pipeline')
     .insert({
       agent_id: DEFAULT_AGENT_ID,
@@ -72,7 +72,7 @@ export async function updateLeadIdentity(
 ): Promise<void> {
   if (!leadId || Object.keys(fields).length === 0) return
 
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('pipeline')
     .update(fields)
     .eq('id', leadId)
@@ -86,7 +86,7 @@ export async function updateLeadIdentity(
 export async function updateLeadStage(leadId: string, stage: string): Promise<void> {
   if (!leadId) return
 
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('pipeline')
     .update({ stage })
     .eq('id', leadId)
@@ -102,7 +102,7 @@ export async function touchLead(leadId: string): Promise<void> {
   if (!leadId) return
 
   const now = new Date().toISOString()
-  const { error } = await supabase
+  const { error } = await getSupabase()
     .from('pipeline')
     .update({ scout_last_interaction: now, last_contact: now })
     .eq('id', leadId)
