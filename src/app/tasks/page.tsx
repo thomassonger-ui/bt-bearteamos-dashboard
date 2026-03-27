@@ -1,23 +1,52 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Sidebar from '@/components/Sidebar'
 import TaskList from '@/components/TaskList'
-import { MOCK_AGENT, MOCK_TASKS, MOCK_ACTIVITY_LOG } from '@/lib/mockData'
-import type { Task, ActivityLog } from '@/types'
+import { getFirstAgent, getAgent, getTasks, updateTaskStatus, logActivity } from '@/lib/queries'
+import type { Agent, Task } from '@/types'
 
 export default function TasksPage() {
-  const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS)
-  const [log, setLog] = useState<ActivityLog[]>(MOCK_ACTIVITY_LOG)
+  const [agent, setAgent] = useState<Agent | null>(null)
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function load() {
+      const storedId = sessionStorage.getItem('bt_agent_id')
+      const agentData = storedId ? await getAgent(storedId) : await getFirstAgent()
+      if (!agentData) { setLoading(false); return }
+      const taskData = await getTasks(agentData.id)
+      setAgent(agentData)
+      setTasks(taskData)
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  async function handleTaskUpdate(taskId: string, status: Task['status']) {
+    const completedAt = status === 'completed' ? new Date().toISOString() : undefined
+    await updateTaskStatus(taskId, status, completedAt)
+    if (agent) {
+      const task = tasks.find((t) => t.id === taskId)
+      if (task) {
+        await logActivity({
+          agent_id: agent.id,
+          action_type: status === 'completed' ? 'task_completed' : 'task_missed',
+          description: `${status === 'completed' ? 'Completed' : 'Missed'}: ${task.title}`,
+          outcome: status === 'completed' ? 'success' : 'failure',
+          task_id: taskId,
+        })
+      }
+      setTasks(await getTasks(agent.id))
+    }
+  }
 
   const pending = tasks.filter((t) => t.status === 'pending' || t.status === 'overdue')
   const completed = tasks.filter((t) => t.status === 'completed')
   const missed = tasks.filter((t) => t.status === 'missed')
 
-  function handleTaskUpdate(updatedTasks: Task[], newLog: ActivityLog) {
-    setTasks(updatedTasks)
-    setLog((prev) => [newLog, ...prev])
-  }
+  if (loading) return <div style={{ padding: 40, color: 'var(--bt-text-dim)' }}>Loading…</div>
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -25,13 +54,10 @@ export default function TasksPage() {
       <main style={{ flex: 1, padding: '24px 28px', overflowY: 'auto' }}>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
           <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>
-              Task Management
-            </div>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>{MOCK_AGENT.name}</div>
+            <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Task Management</div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>{agent?.name ?? '—'}</div>
           </div>
 
-          {/* Summary row */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
             {[
               { label: 'Pending / Overdue', value: pending.length, color: pending.length > 0 ? 'var(--bt-yellow)' : 'var(--bt-green)' },
@@ -45,25 +71,7 @@ export default function TasksPage() {
             ))}
           </div>
 
-          <TaskList
-            agentId={MOCK_AGENT.id}
-            tasks={tasks}
-            onUpdate={handleTaskUpdate}
-          />
-
-          {/* Session log */}
-          {log.length > 0 && (
-            <div style={{ marginTop: 20, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '14px 18px' }}>
-              <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 10 }}>
-                Session Activity
-              </div>
-              {log.slice(0, 5).map((entry) => (
-                <div key={entry.id} style={{ fontSize: 12, color: 'var(--bt-text-dim)', marginBottom: 4 }}>
-                  {entry.description}
-                </div>
-              ))}
-            </div>
-          )}
+          {agent && <TaskList agentId={agent.id} tasks={tasks} onUpdate={handleTaskUpdate} />}
         </div>
       </main>
     </div>
