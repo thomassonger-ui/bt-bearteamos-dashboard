@@ -54,6 +54,8 @@ export interface Pipeline {
   scout_email?: string              // extracted from conversation
   scout_phone?: string              // extracted from conversation
   scout_last_interaction?: string   // ISO timestamp of last Scout message
+  engagement_score?: number         // 0–100 Scout engagement score
+  last_engagement_update?: string   // ISO timestamp of last score update
 }
 
 export interface ComplianceRecord {
