@@ -1,5 +1,6 @@
 import { openai } from '@ai-sdk/openai'
 import { streamText } from 'ai'
+import { rateLimit } from '@/lib/rateLimit'
 import { getSection } from '@/lib/prompts'
 import { saveMessage, getRecentMessages } from '@/lib/memory'
 import {
@@ -186,7 +187,27 @@ function buildCaptureStream(
 
 // ─── HANDLER ─────────────────────────────────────────────────────────────────
 
+// ─── LOGGING HELPER ───────────────────────────────────────────────────────────
+
+function logEvent(label: string, data?: unknown) {
+  console.log(`[${label}]`, data ?? '')
+}
+
 export async function POST(req: Request) {
+  // ── Auth ────────────────────────────────────────────────────────────────────
+  const authHeader = req.headers.get('authorization')
+  if (authHeader !== `Bearer ${process.env.INTERNAL_API_KEY}`) {
+    return new Response(JSON.stringify({ error: 'unauthorized' }), { status: 401 })
+  }
+
+  // ── Rate limit ──────────────────────────────────────────────────────────────
+  const ip = req.headers.get('x-forwarded-for') ?? 'unknown'
+  if (!rateLimit(ip)) {
+    logEvent('rate_limited', { ip })
+    return new Response(JSON.stringify({ error: 'rate_limited' }), { status: 429 })
+  }
+
+  try {
   const body = await req.json()
   const { messages, session_id, agent_id } = body
 
@@ -382,8 +403,15 @@ INSTRUCTION: ${stageInstruction}
       ? buildCloseGuardStream(baseResponse.body, saveAssistant)
       : buildCaptureStream(baseResponse.body, saveAssistant)
 
+  logEvent('scout_response', { session_id, stage, score })
+
   return new Response(guardedStream, {
     headers: baseResponse.headers,
     status: baseResponse.status,
   })
+
+  } catch (err) {
+    logEvent('api_error', err)
+    return new Response(JSON.stringify({ error: 'internal_error' }), { status: 500 })
+  }
 }
