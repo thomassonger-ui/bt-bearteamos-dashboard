@@ -28,29 +28,33 @@ export default function LoginPage() {
       })
 
       if (!authRes.ok) {
-        setError('Incorrect password.')
+        setError('Incorrect username or password.')
         setLoading(false)
         return
       }
 
-      // Fetch agent from DB
-      const agent = await getFirstAgent()
-      if (!agent) { setError('No agent found in system.'); setLoading(false); return }
+      // Auth succeeded — store agent info and redirect immediately
+      // Post-auth steps (engine, logging) run non-blocking so they can't gate access
+      void (async () => {
+        try {
+          const agent = await getFirstAgent()
+          if (!agent) return
 
-      // Log the login event
-      await logActivity({
-        agent_id: agent.id,
-        action_type: 'login',
-        description: `Agent logged in: ${agent.name}`,
-        outcome: 'neutral',
-      })
+          sessionStorage.setItem('bt_agent_id', agent.id)
+          sessionStorage.setItem('bt_agent_name', agent.name)
 
-      // Run engine on login — 24h inactivity check fires here
-      await runEngine(agent.id)
+          await logActivity({
+            agent_id: agent.id,
+            action_type: 'login',
+            description: `Agent logged in: ${agent.name}`,
+            outcome: 'neutral',
+          })
 
-      // Store agent ID in sessionStorage for pages to use
-      sessionStorage.setItem('bt_agent_id', agent.id)
-      sessionStorage.setItem('bt_agent_name', agent.name)
+          await runEngine(agent.id)
+        } catch (bgErr) {
+          console.error('[login bg]', bgErr)
+        }
+      })()
 
       router.push('/dashboard')
     } catch (err) {
