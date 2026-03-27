@@ -25,8 +25,11 @@ function LoginForm() {
       });
 
       if (res.ok) {
-        router.push(from);
-        router.refresh();
+        // Wait 500ms to ensure cookies are set before redirecting
+        setTimeout(() => {
+          router.push(from);
+          router.refresh();
+        }, 500);
       } else {
         setError('Invalid username or password. Try again.');
         setPassword('');
