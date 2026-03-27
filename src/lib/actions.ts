@@ -27,7 +27,7 @@ export async function forceTask(leadId: string, title: string): Promise<void> {
     status: 'pending',
     due_date: due,
     created_at: new Date().toISOString(),
-  })
+  } as any)
 
   if (error) {
     console.error('[actions] forceTask insert failed:', error.message)
@@ -90,7 +90,7 @@ export async function triggerFollowUp(leadId: string): Promise<void> {
     status: 'pending',
     due_date: due,
     created_at: new Date().toISOString(),
-  })
+  } as any)
 
   if (error) {
     console.error('[actions] triggerFollowUp insert failed:', error.message)
