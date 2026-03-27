@@ -2,20 +2,49 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { getFirstAgent } from '@/lib/queries'
+import { runEngine } from '@/lib/engine'
+import { logActivity } from '@/lib/queries'
 
 export default function LoginPage() {
   const [name, setName] = useState('')
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()
 
-  function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) {
-      setError('Name is required.')
-      return
+    if (!name.trim()) { setError('Name is required.'); return }
+    setLoading(true)
+    setError('')
+
+    try {
+      // Phase 1: fetch first (only) agent from DB — no real auth
+      const agent = await getFirstAgent()
+      if (!agent) { setError('No agent found in system.'); setLoading(false); return }
+
+      // Log the login event
+      await logActivity({
+        agent_id: agent.id,
+        action_type: 'login',
+        description: `Agent logged in: ${agent.name}`,
+        outcome: 'neutral',
+      })
+
+      // Run engine on login — this is where 24h inactivity check fires
+      await runEngine(agent.id)
+
+      // Store agent ID in sessionStorage for pages to use
+      sessionStorage.setItem('bt_agent_id', agent.id)
+      sessionStorage.setItem('bt_agent_name', agent.name)
+
+      router.push('/dashboard')
+    } catch (err) {
+      console.error(err)
+      setError('System error. Please try again.')
+    } finally {
+      setLoading(false)
     }
-    // Placeholder — no real auth in Phase 1
-    router.push('/dashboard')
   }
 
   return (
@@ -27,7 +56,6 @@ export default function LoginPage() {
         width: 340, background: 'var(--bt-surface)',
         border: '1px solid var(--bt-border)', borderRadius: 8, padding: '36px 32px',
       }}>
-        {/* Logo */}
         <div style={{ marginBottom: 28, textAlign: 'center' }}>
           <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--bt-accent)', letterSpacing: '0.06em' }}>
             BEARTEAM<span style={{ color: 'var(--bt-text-dim)' }}>OS</span>
@@ -46,7 +74,7 @@ export default function LoginPage() {
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Sarah Mitchell"
+              placeholder="Your name"
               autoFocus
               style={{
                 width: '100%', padding: '10px 12px', fontSize: 14,
@@ -61,18 +89,19 @@ export default function LoginPage() {
             <div style={{ fontSize: 12, color: 'var(--bt-red)', marginBottom: 12 }}>{error}</div>
           )}
 
-          <button type="submit" style={{
+          <button type="submit" disabled={loading} style={{
             width: '100%', padding: '10px', fontSize: 13, fontWeight: 600,
-            background: 'var(--bt-accent)', color: 'var(--bt-black)',
-            border: 'none', borderRadius: 4, cursor: 'pointer', letterSpacing: '0.04em',
+            background: loading ? 'var(--bt-muted)' : 'var(--bt-accent)',
+            color: 'var(--bt-black)', border: 'none', borderRadius: 4,
+            cursor: loading ? 'not-allowed' : 'pointer', letterSpacing: '0.04em',
           }}>
-            Enter System
+            {loading ? 'Loading system…' : 'Enter System'}
           </button>
         </form>
 
         <div style={{ marginTop: 24, fontSize: 11, color: 'var(--bt-text-dim)', textAlign: 'center' }}>
           Bear Team Real Estate · Orlando, FL<br />
-          Phase 1 — Placeholder Auth
+          Phase 2 — Live Database
         </div>
       </div>
     </div>
