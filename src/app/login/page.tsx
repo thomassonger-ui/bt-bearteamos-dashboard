@@ -20,7 +20,6 @@ export default function LoginPage() {
     setError('')
 
     try {
-      // Validate password server-side — sets bt_session cookie on success
       const authRes = await fetch('/api/auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -33,27 +32,21 @@ export default function LoginPage() {
         return
       }
 
-      // Auth succeeded — store username and redirect immediately
-      // Post-auth steps (engine, logging) run non-blocking so they can't gate access
       const loggedInUsername = username.toLowerCase().trim()
       sessionStorage.setItem('bt_username', loggedInUsername)
 
       void (async () => {
         try {
-          // Look up agent by username — fallback to first agent for tom/admin
           const agent = await getAgentByUsername(loggedInUsername) ?? await getFirstAgent()
           if (!agent) return
-
           sessionStorage.setItem('bt_agent_id', agent.id)
           sessionStorage.setItem('bt_agent_name', agent.name)
-
           await logActivity({
             agent_id: agent.id,
             action_type: 'login',
             description: `Agent logged in: ${agent.name}`,
             outcome: 'neutral',
           })
-
           await runEngine(agent.id)
         } catch (bgErr) {
           console.error('[login bg]', bgErr)
@@ -71,27 +64,32 @@ export default function LoginPage() {
 
   return (
     <div style={{
-      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'var(--bt-black)',
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: '#0d1b2a',
     }}>
       <div style={{
-        width: 340, background: 'var(--bt-surface)',
-        border: '1px solid var(--bt-border)', borderRadius: 8, padding: '36px 32px',
+        width: 380,
+        background: '#ffffff',
+        borderRadius: 12,
+        padding: '44px 40px 36px',
+        boxShadow: '0 4px 32px rgba(0,0,0,0.28)',
       }}>
-        <div style={{ marginBottom: 28, textAlign: 'center' }}>
-          <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--bt-accent)', letterSpacing: '0.06em' }}>
-            BEARTEAM<span style={{ color: 'var(--bt-text-dim)' }}>OS</span>
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: '#0d1b2a', letterSpacing: '-0.01em' }}>
+            BearTeamOS Dashboard
           </div>
-          <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginTop: 4 }}>
-            Agent Operating System
+          <div style={{ fontSize: 13, color: '#6b7280', marginTop: 6 }}>
+            Bear Team Real Estate · Orlando, FL
           </div>
         </div>
 
         <form onSubmit={handleLogin}>
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
-              Username
-            </label>
+          {/* Username */}
+          <div style={{ marginBottom: 14 }}>
             <input
               type="text"
               value={username}
@@ -99,50 +97,63 @@ export default function LoginPage() {
               placeholder="Username"
               autoFocus
               style={{
-                width: '100%', padding: '10px 12px', fontSize: 14,
-                background: 'var(--bt-muted)', border: '1px solid var(--bt-border)',
-                borderRadius: 4, color: 'var(--bt-text)', outline: 'none',
+                width: '100%',
+                padding: '12px 14px',
+                fontSize: 14,
+                color: '#0d1b2a',
+                background: '#ffffff',
+                border: '1px solid #d1d5db',
+                borderRadius: 8,
+                outline: 'none',
                 boxSizing: 'border-box',
               }}
             />
           </div>
 
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>
-              Password
-            </label>
+          {/* Password */}
+          <div style={{ marginBottom: 20 }}>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter password"
               style={{
-                width: '100%', padding: '10px 12px', fontSize: 14,
-                background: 'var(--bt-muted)', border: '1px solid var(--bt-border)',
-                borderRadius: 4, color: 'var(--bt-text)', outline: 'none',
+                width: '100%',
+                padding: '12px 14px',
+                fontSize: 14,
+                color: '#0d1b2a',
+                background: '#ffffff',
+                border: '1px solid #d1d5db',
+                borderRadius: 8,
+                outline: 'none',
                 boxSizing: 'border-box',
               }}
             />
           </div>
 
           {error && (
-            <div style={{ fontSize: 12, color: 'var(--bt-red)', marginBottom: 12 }}>{error}</div>
+            <div style={{ fontSize: 12, color: '#dc2626', marginBottom: 12 }}>{error}</div>
           )}
 
-          <button type="submit" disabled={loading} style={{
-            width: '100%', padding: '10px', fontSize: 13, fontWeight: 600,
-            background: loading ? 'var(--bt-muted)' : 'var(--bt-accent)',
-            color: 'var(--bt-black)', border: 'none', borderRadius: 4,
-            cursor: loading ? 'not-allowed' : 'pointer', letterSpacing: '0.04em',
-          }}>
-            {loading ? 'Loading system…' : 'Enter System'}
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              width: '100%',
+              padding: '12px',
+              fontSize: 14,
+              fontWeight: 600,
+              background: loading ? '#4b5563' : '#0d1b2a',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: 8,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              letterSpacing: '0.01em',
+            }}
+          >
+            {loading ? 'Signing in…' : 'Enter'}
           </button>
         </form>
-
-        <div style={{ marginTop: 24, fontSize: 11, color: 'var(--bt-text-dim)', textAlign: 'center' }}>
-          Bear Team Real Estate · Orlando, FL<br />
-          BearTeamOS — Live Database
-        </div>
       </div>
     </div>
   )
