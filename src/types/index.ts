@@ -47,7 +47,10 @@ export interface Pipeline {
   agent_id: string
   lead_name: string
   stage: string
-  lead_type?: 'buyer' | 'seller' | 'rental'  // required for new leads
+  lead_type?: 'buyer' | 'seller' | 'rental'
+  phone?: string
+  email?: string
+  address?: string
   last_contact: string              // ISO timestamp
   notes?: string
   created_at: string
