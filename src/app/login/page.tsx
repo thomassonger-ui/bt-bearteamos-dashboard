@@ -26,6 +26,8 @@ export default function LoginPage() {
         body: JSON.stringify({ username, password }),
       })
 
+      const loginData = await authRes.json()
+
       if (!authRes.ok) {
         setError('Incorrect username or password.')
         setLoading(false)
@@ -34,6 +36,11 @@ export default function LoginPage() {
 
       const loggedInUsername = username.toLowerCase().trim()
       sessionStorage.setItem('bt_username', loggedInUsername)
+      if (loginData.is_admin) {
+        sessionStorage.setItem('bt_is_admin', 'true')
+      } else {
+        sessionStorage.removeItem('bt_is_admin')
+      }
 
       void (async () => {
         try {
