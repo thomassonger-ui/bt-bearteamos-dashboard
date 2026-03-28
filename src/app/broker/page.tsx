@@ -74,7 +74,7 @@ export default function BrokerPage() {
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', background: 'var(--bt-black)' }}>
+      <div style={{ display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center', background: 'var(--bt-black)' }}>
         <div style={{ fontSize: 13, color: 'var(--bt-text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
           Loading broker view…
         </div>
@@ -83,7 +83,7 @@ export default function BrokerPage() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bt-black)' }}>
+    <div style={{ height: '100vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'var(--bt-black)' }}>
       {/* Top bar */}
       <div style={{
         height: 48, background: 'var(--bt-surface)', borderBottom: '1px solid var(--bt-border)',
@@ -112,7 +112,8 @@ export default function BrokerPage() {
       </div>
 
       {/* Main content */}
-      <div style={{ padding: '24px 28px', maxWidth: 1400, margin: '0 auto' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
+      <div style={{ maxWidth: 1400, margin: '0 auto' }}>
 
         {/* Scout Lead Intelligence Alerts */}
         {alerts.length > 0 && (
@@ -193,6 +194,7 @@ export default function BrokerPage() {
             Select an agent to view details and take action.
           </div>
         )}
+      </div>
       </div>
     </div>
   )
