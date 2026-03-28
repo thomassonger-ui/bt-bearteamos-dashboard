@@ -59,7 +59,7 @@ export default function PipelineBoard({ pipeline, onContact }: Props) {
     <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6 }}>
       <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--bt-border)' }}>
         <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-          Pipeline
+          Pipeline Board
         </div>
       </div>
 
@@ -116,21 +116,33 @@ export default function PipelineBoard({ pipeline, onContact }: Props) {
                         </div>
                       </div>
 
-                      {/* Row 2: contact info — phone · email · address */}
+                      {/* Row 2: phone (SMS) · email (Gmail compose) · address */}
                       {(lead.phone || lead.email || lead.address) && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', marginTop: 4 }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', marginTop: 5 }}>
                           {lead.phone && (
-                            <a href={`tel:${lead.phone}`} style={{ fontSize: 11, color: 'var(--bt-text-dim)', textDecoration: 'none' }}>
-                              📞 {lead.phone}
+                            <a
+                              href={`sms:${lead.phone.replace(/\D/g, '')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Open in Messages"
+                              style={{ fontSize: 11, color: 'var(--bt-accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}
+                            >
+                              📱 {lead.phone}
                             </a>
                           )}
                           {lead.email && (
-                            <a href={`mailto:${lead.email}`} style={{ fontSize: 11, color: 'var(--bt-text-dim)', textDecoration: 'none' }}>
+                            <a
+                              href={`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(lead.email)}&su=${encodeURIComponent('Following up — Bear Team Real Estate')}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title="Compose in Gmail"
+                              style={{ fontSize: 11, color: 'var(--bt-accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}
+                            >
                               ✉ {lead.email}
                             </a>
                           )}
                           {lead.address && (
-                            <span style={{ fontSize: 11, color: 'var(--bt-text-dim)' }}>
+                            <span style={{ fontSize: 11, color: 'var(--bt-text-dim)', display: 'flex', alignItems: 'center', gap: 3 }}>
                               📍 {lead.address}
                             </span>
                           )}
@@ -139,7 +151,7 @@ export default function PipelineBoard({ pipeline, onContact }: Props) {
 
                       {/* Row 3: notes */}
                       {lead.notes && (
-                        <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginTop: 3 }}>{lead.notes}</div>
+                        <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginTop: 4 }}>{lead.notes}</div>
                       )}
                     </div>
                   )
