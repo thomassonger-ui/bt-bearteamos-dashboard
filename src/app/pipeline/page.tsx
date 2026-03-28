@@ -20,7 +20,9 @@ export default function PipelinePage() {
   const [chatInput, setChatInput] = useState('')
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([])
   const [chatLoading, setChatLoading] = useState(false)
+  const [listening, setListening] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
+  const recognitionRef = useRef<SpeechRecognition | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -72,6 +74,40 @@ export default function PipelinePage() {
     }
   }
 
+  function toggleMic() {
+    const SpeechRecognition =
+      (window as Window & typeof globalThis & { SpeechRecognition?: typeof globalThis.SpeechRecognition; webkitSpeechRecognition?: typeof globalThis.SpeechRecognition }).SpeechRecognition ||
+      (window as Window & typeof globalThis & { SpeechRecognition?: typeof globalThis.SpeechRecognition; webkitSpeechRecognition?: typeof globalThis.SpeechRecognition }).webkitSpeechRecognition
+
+    if (!SpeechRecognition) {
+      alert('Speech recognition not supported in this browser.')
+      return
+    }
+
+    if (listening && recognitionRef.current) {
+      recognitionRef.current.stop()
+      setListening(false)
+      return
+    }
+
+    const recognition = new SpeechRecognition()
+    recognition.continuous = false
+    recognition.interimResults = false
+    recognition.lang = 'en-US'
+    recognitionRef.current = recognition
+
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript
+      setChatInput(prev => prev ? prev + ' ' + transcript : transcript)
+      setListening(false)
+    }
+    recognition.onerror = () => setListening(false)
+    recognition.onend = () => setListening(false)
+
+    recognition.start()
+    setListening(true)
+  }
+
   async function sendChat(e: React.FormEvent) {
     e.preventDefault()
     if (!chatInput.trim() || !agent) return
@@ -87,7 +123,6 @@ export default function PipelinePage() {
       })
       const data = await res.json()
       setChatMessages(prev => [...prev, { role: 'assistant', content: data.reply ?? 'Done.' }])
-      // Refresh pipeline after any action
       if (data.action_type && data.action_type !== 'none' && data.action_type !== 'ask_type') {
         setPipeline(await getPipeline(agent.id))
       }
@@ -111,10 +146,107 @@ export default function PipelinePage() {
       <main style={{ flex: 1, padding: '24px 28px', overflowY: 'auto', height: '100%' }}>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
 
-          {/* Header */}
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Pipeline</div>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>{agent?.name ?? '—'}</div>
+          {/* Header row — title left, chat right */}
+          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', marginBottom: 20 }}>
+
+            {/* Left: title */}
+            <div style={{ flexShrink: 0 }}>
+              <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Pipeline</div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>{agent?.name ?? '—'}</div>
+            </div>
+
+            {/* Right: AI Chat panel */}
+            <div style={{
+              flex: 1,
+              background: 'var(--bt-surface)',
+              border: '1px solid var(--bt-border)',
+              borderRadius: 6,
+              overflow: 'hidden',
+            }}>
+              {/* Chat header */}
+              <div style={{
+                padding: '8px 14px',
+                borderBottom: '1px solid var(--bt-border)',
+                display: 'flex', alignItems: 'center', gap: 7,
+              }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--bt-accent)', flexShrink: 0 }} />
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--bt-text-dim)' }}>
+                  Pipeline AI
+                </span>
+              </div>
+
+              {/* Messages */}
+              {chatMessages.length > 0 && (
+                <div style={{ padding: '10px 14px', maxHeight: 140, overflowY: 'auto' }}>
+                  {chatMessages.map((m, i) => (
+                    <div key={i} style={{
+                      marginBottom: 6,
+                      fontSize: 12,
+                      color: m.role === 'user' ? 'var(--bt-text)' : 'var(--bt-accent)',
+                      paddingLeft: m.role === 'assistant' ? 8 : 0,
+                      borderLeft: m.role === 'assistant' ? '2px solid var(--bt-accent)' : 'none',
+                    }}>
+                      {m.content}
+                    </div>
+                  ))}
+                  {chatLoading && (
+                    <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', fontStyle: 'italic' }}>Thinking…</div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+              )}
+
+              {/* Input row */}
+              <form onSubmit={sendChat} style={{
+                display: 'flex', alignItems: 'center',
+                borderTop: chatMessages.length > 0 ? '1px solid var(--bt-border)' : 'none',
+              }}>
+                <input
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  placeholder='e.g. "John Smith buyer $450K 3/2 Winter Park 407-555-1212 john@gmail.com"'
+                  disabled={chatLoading}
+                  style={{
+                    flex: 1, padding: '10px 14px', fontSize: 12,
+                    background: 'transparent', border: 'none', outline: 'none',
+                    color: 'var(--bt-text)',
+                  }}
+                />
+                {/* Mic button */}
+                <button
+                  type="button"
+                  onClick={toggleMic}
+                  title={listening ? 'Stop listening' : 'Speak a lead'}
+                  style={{
+                    padding: '10px 10px',
+                    background: 'transparent',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: 15,
+                    color: listening ? 'var(--bt-red)' : 'var(--bt-text-dim)',
+                    flexShrink: 0,
+                  }}
+                >
+                  {listening ? '⏹' : '🎙'}
+                </button>
+                {/* Send button */}
+                <button
+                  type="submit"
+                  disabled={chatLoading || !chatInput.trim()}
+                  style={{
+                    padding: '10px 16px',
+                    background: chatInput.trim() ? 'var(--bt-accent)' : 'var(--bt-border)',
+                    border: 'none',
+                    color: 'var(--bt-black)',
+                    fontWeight: 700, fontSize: 13,
+                    cursor: chatInput.trim() ? 'pointer' : 'default',
+                    flexShrink: 0,
+                  }}
+                >
+                  →
+                </button>
+              </form>
+            </div>
           </div>
 
           {/* 90-day Activity Chart */}
@@ -150,7 +282,7 @@ export default function PipelinePage() {
             </div>
           )}
 
-          {/* Stats */}
+          {/* Lead Stats */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
             {[
               { label: 'Total Leads', value: pipeline.length },
@@ -174,59 +306,6 @@ export default function PipelinePage() {
           )}
 
           <PipelineBoard pipeline={pipeline} onContact={handleContact} />
-
-          {/* AI Chat */}
-          <div style={{ marginTop: 28, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, overflow: 'hidden' }}>
-            <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--bt-border)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--bt-accent)' }} />
-              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--bt-text-dim)' }}>Pipeline AI</span>
-            </div>
-
-            {/* Messages */}
-            <div style={{ padding: '12px 16px', minHeight: 80, maxHeight: 220, overflowY: 'auto' }}>
-              {chatMessages.length === 0 && (
-                <div style={{ fontSize: 12, color: 'var(--bt-text-dim)', fontStyle: 'italic' }}>
-                  Add, update, or remove leads — e.g. "Add Sarah Johnson buyer 407-555-1234"
-                </div>
-              )}
-              {chatMessages.map((m, i) => (
-                <div key={i} style={{
-                  marginBottom: 8,
-                  fontSize: 13,
-                  color: m.role === 'user' ? 'var(--bt-text)' : 'var(--bt-accent)',
-                  paddingLeft: m.role === 'assistant' ? 10 : 0,
-                  borderLeft: m.role === 'assistant' ? '2px solid var(--bt-accent)' : 'none',
-                }}>
-                  {m.content}
-                </div>
-              ))}
-              {chatLoading && (
-                <div style={{ fontSize: 12, color: 'var(--bt-text-dim)', fontStyle: 'italic' }}>Thinking…</div>
-              )}
-              <div ref={chatEndRef} />
-            </div>
-
-            {/* Input */}
-            <form onSubmit={sendChat} style={{ borderTop: '1px solid var(--bt-border)', display: 'flex' }}>
-              <input
-                value={chatInput}
-                onChange={e => setChatInput(e.target.value)}
-                placeholder="Tell me about a lead…"
-                disabled={chatLoading}
-                style={{
-                  flex: 1, padding: '12px 16px', fontSize: 13,
-                  background: 'transparent', border: 'none', outline: 'none',
-                  color: 'var(--bt-text)',
-                }}
-              />
-              <button type="submit" disabled={chatLoading || !chatInput.trim()} style={{
-                padding: '12px 20px', background: 'var(--bt-accent)', border: 'none',
-                color: 'var(--bt-black)', fontWeight: 700, fontSize: 13, cursor: 'pointer',
-              }}>
-                →
-              </button>
-            </form>
-          </div>
 
         </div>
       </main>
