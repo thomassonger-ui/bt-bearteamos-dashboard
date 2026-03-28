@@ -6,6 +6,7 @@ import PipelineBoard from '@/components/PipelineBoard'
 import { getFirstAgent, getAgent, getPipeline, updateLastContact, logActivity } from '@/lib/queries'
 import type { Agent, Pipeline } from '@/types'
 import { getWeeklyMetrics, paceColor, insightLine, TARGETS } from '@/lib/metrics'
+import ActivityChart from '@/components/ActivityChart'
 import type { WeeklyMetrics } from '@/lib/metrics'
 
 interface ChatMessage {
@@ -18,6 +19,7 @@ export default function PipelinePage() {
   const [pipeline, setPipeline] = useState<Pipeline[]>([])
   const [loading, setLoading] = useState(true)
   const [metrics, setMetrics] = useState<WeeklyMetrics | null>(null)
+  const [logCallLoading, setLogCallLoading] = useState(false)
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -138,6 +140,22 @@ export default function PipelinePage() {
     setListening(true)
   }
 
+  async function logCall() {
+    if (!agent || logCallLoading) return
+    setLogCallLoading(true)
+    try {
+      await fetch('/api/log-call', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: agent.id }),
+      })
+      const freshMetrics = await getWeeklyMetrics(agent.id)
+      setMetrics(freshMetrics)
+    } finally {
+      setLogCallLoading(false)
+    }
+  }
+
   const stalled = pipeline.filter((p) => {
     const days = (Date.now() - new Date(p.last_contact).getTime()) / (1000 * 60 * 60 * 24)
     return days >= 3 && p.stage !== 'closed'
@@ -176,6 +194,15 @@ export default function PipelinePage() {
             <div style={{ marginBottom: 20, padding: '12px 16px', background: 'rgba(224,82,82,0.08)', border: '1px solid rgba(224,82,82,0.3)', borderRadius: 6, fontSize: 13, color: 'var(--bt-red)' }}>
               ⚠ {stalled.length} lead{stalled.length > 1 ? 's' : ''} with no contact in 3+ days — engine will generate follow-up tasks.
             </div>
+          )}
+
+          {/* 90-day activity chart */}
+          {agent && (
+            <ActivityChart
+              agentId={agent.id}
+              onLogCall={logCall}
+              logCallLoading={logCallLoading}
+            />
           )}
 
           {/* Performance strip */}
@@ -223,7 +250,7 @@ export default function PipelinePage() {
             </div>
           )}
 
-          {/* Split layout: pipeline board + chat */}}
+          {/* Split layout: pipeline board + chat */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20, alignItems: 'start' }}>
             <div>
               <PipelineBoard pipeline={pipeline} onContact={handleContact} />
@@ -346,3 +373,4 @@ export default function PipelinePage() {
     </div>
   )
 }
+
