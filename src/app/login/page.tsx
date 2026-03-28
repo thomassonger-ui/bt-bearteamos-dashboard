@@ -81,7 +81,7 @@ export default function LoginPage() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#f0f1f3',
+      backgroundColor: '#0b1d3a',
       fontFamily: 'sans-serif',
     }}>
       <div style={{
