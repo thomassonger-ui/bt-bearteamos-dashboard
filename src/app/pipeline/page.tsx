@@ -16,6 +16,7 @@ export default function PipelinePage() {
   const [loading, setLoading] = useState(true)
   const [metrics, setMetrics] = useState<WeeklyMetrics | null>(null)
   const [logCallLoading, setLogCallLoading] = useState(false)
+  const [selectedLead, setSelectedLead] = useState<Pipeline | null>(null)
 
   // Chat state
   const [chatInput, setChatInput] = useState('')
@@ -147,7 +148,7 @@ export default function PipelinePage() {
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar />
       <main style={{ flex: 1, padding: '24px 28px', overflowY: 'auto', height: '100%' }}>
-        <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', maxWidth: 1200, margin: '0 auto' }}>
+        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
 
           {/* Title */}
@@ -315,16 +316,16 @@ export default function PipelinePage() {
             </div>
           )}
 
-          <PipelineBoard pipeline={pipeline} onContact={handleContact} />
+          <PipelineBoard pipeline={pipeline} onContact={handleContact} onSelectLead={setSelectedLead} selectedLeadId={selectedLead?.id ?? null} />
+
+          {/* Coach / Scout — below pipeline board, full width */}
+          <div style={{ marginTop: 20 }}>
+            <CoachPanel selectedLead={selectedLead} />
+          </div>
 
         </div>{/* end main content col */}
 
-        {/* Right rail: Coach / Scout */}
-        <div style={{ flexShrink: 0, width: 260, position: 'sticky', top: 0, maxHeight: 'calc(100vh - 48px)', display: 'flex', flexDirection: 'column' }}>
-          <CoachPanel />
-        </div>
-
-        </div>{/* end outer flex */}
+        </div>{/* end outer wrapper */}
       </main>
     </div>
   )
