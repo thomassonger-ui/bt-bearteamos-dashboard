@@ -273,7 +273,7 @@ export default function PipelinePage() {
           </div>
 
           {/* Compact stats bar — all 8 metrics in one row */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexShrink: 0, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 4, flexShrink: 0, flexWrap: 'wrap' }}>
             {[
               ...(metrics ? [
                 { label: 'Calls', value: metrics.calls_this_week, target: TARGETS.calls, color: paceColor(metrics.call_pace) },
@@ -286,17 +286,17 @@ export default function PipelinePage() {
               { label: 'Stale', value: stalled.length, color: stalled.length > 0 ? 'var(--bt-red)' : 'var(--bt-text)' },
               { label: 'Closed', value: pipeline.filter(p => p.stage === 'closed').length, color: 'var(--bt-green)' },
             ].map((s) => (
-              <div key={s.label} style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 4, padding: '4px 10px', display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: s.color }}>{s.value}{'target' in s && s.target ? <span style={{ fontSize: 9, color: 'var(--bt-text-dim)', marginLeft: 2 }}>/{s.target}</span> : null}</span>
-                <span style={{ fontSize: 9, color: 'var(--bt-text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</span>
+              <div key={s.label} style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 4, padding: '6px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 54 }}>
+                <span style={{ fontSize: 20, fontWeight: 700, lineHeight: 1, color: s.color }}>{s.value}{'target' in s && s.target ? <span style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginLeft: 2 }}>/{s.target}</span> : null}</span>
+                <span style={{ fontSize: 9, color: 'var(--bt-text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 3 }}>{s.label}</span>
               </div>
             ))}
-            {metrics && (
-              <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', fontStyle: 'italic', display: 'flex', alignItems: 'center', paddingLeft: 4 }}>
-                {insightLine(metrics)}
-              </div>
-            )}
           </div>
+          {metrics && (
+            <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', fontStyle: 'italic', marginBottom: 6, flexShrink: 0 }}>
+              {insightLine(metrics)}
+            </div>
+          )}
 
           {stalled.length > 0 && (
             <div style={{ marginBottom: 6, padding: '5px 10px', background: 'rgba(224,82,82,0.08)', border: '1px solid rgba(224,82,82,0.3)', borderRadius: 4, fontSize: 11, color: 'var(--bt-red)', flexShrink: 0 }}>
