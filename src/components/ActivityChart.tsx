@@ -53,7 +53,8 @@ export default function ActivityChart({ agentId, onLogCall, logCallLoading }: Pr
       border: '1px solid var(--bt-border)',
       borderRadius: 6,
       padding: '16px 20px',
-      marginBottom: 20,
+      height: '100%',
+      boxSizing: 'border-box',
     }}>
       {/* Header row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
