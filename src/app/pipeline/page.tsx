@@ -5,6 +5,8 @@ import Sidebar from '@/components/Sidebar'
 import PipelineBoard from '@/components/PipelineBoard'
 import { getFirstAgent, getAgent, getPipeline, updateLastContact, logActivity } from '@/lib/queries'
 import type { Agent, Pipeline } from '@/types'
+import { getWeeklyMetrics, paceColor, insightLine, TARGETS } from '@/lib/metrics'
+import type { WeeklyMetrics } from '@/lib/metrics'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -15,6 +17,7 @@ export default function PipelinePage() {
   const [agent, setAgent] = useState<Agent | null>(null)
   const [pipeline, setPipeline] = useState<Pipeline[]>([])
   const [loading, setLoading] = useState(true)
+  const [metrics, setMetrics] = useState<WeeklyMetrics | null>(null)
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -35,8 +38,10 @@ export default function PipelinePage() {
       const agentData = storedId ? await getAgent(storedId) : await getFirstAgent()
       if (!agentData) { setLoading(false); return }
       const pipelineData = await getPipeline(agentData.id)
+      const metricsData = await getWeeklyMetrics(agentData.id)
       setAgent(agentData)
       setPipeline(pipelineData)
+      setMetrics(metricsData)
       setLoading(false)
     }
     load()
@@ -55,7 +60,12 @@ export default function PipelinePage() {
         description: `Logged contact with ${leadName}`,
         outcome: 'success',
       })
-      setPipeline(await getPipeline(agent.id))
+      const [fresh, freshMetrics] = await Promise.all([
+        getPipeline(agent.id),
+        getWeeklyMetrics(agent.id),
+      ])
+      setPipeline(fresh)
+      setMetrics(freshMetrics)
     }
   }
 
@@ -168,7 +178,52 @@ export default function PipelinePage() {
             </div>
           )}
 
-          {/* Split layout: pipeline board + chat */}
+          {/* Performance strip */}
+          {metrics && (
+            <div style={{ marginBottom: 16 }}>
+              {/* 4 metric cards */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 8 }}>
+                {/* Calls */}
+                <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '10px 14px' }}>
+                  <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>Calls</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: paceColor(metrics.call_pace) }}>
+                    {metrics.calls_this_week} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--bt-text-dim)' }}>/ {TARGETS.calls}</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', marginTop: 2 }}>This week</div>
+                </div>
+                {/* Appointments */}
+                <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '10px 14px' }}>
+                  <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>Appointments</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: paceColor(metrics.appointment_pace) }}>
+                    {metrics.appointments_this_week} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--bt-text-dim)' }}>/ {TARGETS.appointments}</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', marginTop: 2 }}>This week</div>
+                </div>
+                {/* Active Pipeline */}
+                <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '10px 14px' }}>
+                  <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>Active Pipeline</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--bt-text)' }}>
+                    {metrics.active_clients + metrics.under_contract}
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', marginTop: 2 }}>Active + Under Contract</div>
+                </div>
+                {/* Projection */}
+                <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '10px 14px' }}>
+                  <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>Projection</div>
+                  <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--bt-text)' }}>
+                    {metrics.listing_projection.toFixed(1)} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--bt-text-dim)' }}>listings</span>
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', marginTop: 2 }}>Based on appointments</div>
+                </div>
+              </div>
+              {/* Insight line */}
+              <div style={{ fontSize: 12, color: 'var(--bt-text-dim)', paddingLeft: 2 }}>
+                {insightLine(metrics)}
+              </div>
+            </div>
+          )}
+
+          {/* Split layout: pipeline board + chat */}}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 20, alignItems: 'start' }}>
             <div>
               <PipelineBoard pipeline={pipeline} onContact={handleContact} />
