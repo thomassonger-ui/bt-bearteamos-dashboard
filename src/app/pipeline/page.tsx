@@ -148,28 +148,39 @@ export default function PipelinePage() {
       <main style={{ flex: 1, padding: '24px 28px', overflowY: 'auto', height: '100%' }}>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
 
-          {/* Header row — title left, chat right */}
-          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', marginBottom: 20 }}>
+          {/* Title */}
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Pipeline</div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>{agent?.name ?? '—'}</div>
+          </div>
 
-            {/* Left: title */}
-            <div style={{ flexShrink: 0 }}>
-              <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Pipeline</div>
-              <div style={{ fontSize: 20, fontWeight: 700 }}>{agent?.name ?? '—'}</div>
-            </div>
+          {/* 90-day chart + Pipeline AI — side by side, equal height */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20, alignItems: 'stretch' }}>
 
-            {/* Right: AI Chat panel */}
+            {/* Left: 90-day Activity Chart */}
+            {agent && (
+              <ActivityChart
+                agentId={agent.id}
+                onLogCall={logCall}
+                logCallLoading={logCallLoading}
+              />
+            )}
+
+            {/* Right: Pipeline AI — square box, full height */}
             <div style={{
-              flex: 1,
               background: 'var(--bt-surface)',
               border: '1px solid var(--bt-border)',
               borderRadius: 6,
               overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
             }}>
               {/* Chat header */}
               <div style={{
-                padding: '8px 14px',
+                padding: '12px 16px',
                 borderBottom: '1px solid var(--bt-border)',
                 display: 'flex', alignItems: 'center', gap: 7,
+                flexShrink: 0,
               }}>
                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--bt-accent)', flexShrink: 0 }} />
                 <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--bt-text-dim)' }}>
@@ -177,36 +188,43 @@ export default function PipelinePage() {
                 </span>
               </div>
 
-              {/* Messages */}
-              {chatMessages.length > 0 && (
-                <div style={{ padding: '10px 14px', maxHeight: 140, overflowY: 'auto' }}>
-                  {chatMessages.map((m, i) => (
+              {/* Messages — fills available space */}
+              <div style={{ flex: 1, padding: '12px 16px', overflowY: 'auto', minHeight: 0 }}>
+                {chatMessages.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--bt-text-dim)', fontStyle: 'italic', lineHeight: 1.6 }}>
+                    Add, update, or remove leads.<br />
+                    <span style={{ opacity: 0.7 }}>e.g. John Smith buyer $450K 3/2 Winter Park</span>
+                  </div>
+                ) : (
+                  chatMessages.map((m, i) => (
                     <div key={i} style={{
-                      marginBottom: 6,
+                      marginBottom: 8,
                       fontSize: 12,
                       color: m.role === 'user' ? 'var(--bt-text)' : 'var(--bt-accent)',
                       paddingLeft: m.role === 'assistant' ? 8 : 0,
                       borderLeft: m.role === 'assistant' ? '2px solid var(--bt-accent)' : 'none',
+                      lineHeight: 1.5,
                     }}>
                       {m.content}
                     </div>
-                  ))}
-                  {chatLoading && (
-                    <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', fontStyle: 'italic' }}>Thinking…</div>
-                  )}
-                  <div ref={chatEndRef} />
-                </div>
-              )}
+                  ))
+                )}
+                {chatLoading && (
+                  <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', fontStyle: 'italic' }}>Thinking…</div>
+                )}
+                <div ref={chatEndRef} />
+              </div>
 
-              {/* Input row */}
+              {/* Input row — pinned to bottom */}
               <form onSubmit={sendChat} style={{
                 display: 'flex', alignItems: 'center',
-                borderTop: chatMessages.length > 0 ? '1px solid var(--bt-border)' : 'none',
+                borderTop: '1px solid var(--bt-border)',
+                flexShrink: 0,
               }}>
                 <input
                   value={chatInput}
                   onChange={e => setChatInput(e.target.value)}
-                  placeholder='e.g. "John Smith buyer $450K 3/2 Winter Park 407-555-1212 john@gmail.com"'
+                  placeholder='e.g. "407-555-1212 john@gmail.com"'
                   disabled={chatLoading}
                   style={{
                     flex: 1, padding: '10px 14px', fontSize: 12,
@@ -220,10 +238,8 @@ export default function PipelinePage() {
                   onClick={toggleMic}
                   title={listening ? 'Stop listening' : 'Speak a lead'}
                   style={{
-                    padding: '10px 10px',
-                    background: 'transparent',
-                    border: 'none',
-                    cursor: 'pointer',
+                    padding: '10px 8px',
+                    background: 'transparent', border: 'none', cursor: 'pointer',
                     fontSize: 15,
                     color: listening ? 'var(--bt-red)' : 'var(--bt-text-dim)',
                     flexShrink: 0,
@@ -236,10 +252,9 @@ export default function PipelinePage() {
                   type="submit"
                   disabled={chatLoading || !chatInput.trim()}
                   style={{
-                    padding: '10px 16px',
+                    padding: '10px 14px',
                     background: chatInput.trim() ? 'var(--bt-accent)' : 'var(--bt-border)',
-                    border: 'none',
-                    color: 'var(--bt-black)',
+                    border: 'none', color: 'var(--bt-black)',
                     fontWeight: 700, fontSize: 13,
                     cursor: chatInput.trim() ? 'pointer' : 'default',
                     flexShrink: 0,
@@ -250,15 +265,6 @@ export default function PipelinePage() {
               </form>
             </div>
           </div>
-
-          {/* 90-day Activity Chart */}
-          {agent && (
-            <ActivityChart
-              agentId={agent.id}
-              onLogCall={logCall}
-              logCallLoading={logCallLoading}
-            />
-          )}
 
           {/* Performance Strip */}
           {metrics && (
