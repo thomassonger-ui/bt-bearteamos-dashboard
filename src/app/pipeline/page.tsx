@@ -161,7 +161,7 @@ export default function PipelinePage() {
           </div>
 
           {/* 90-day chart + Pipeline AI — side by side, fixed height */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10, alignItems: 'stretch', flexShrink: 0, height: 200 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10, alignItems: 'stretch', flexShrink: 0 }}>
 
             {/* Left: 90-day Activity Chart */}
             {agent && (
