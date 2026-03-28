@@ -5,12 +5,52 @@ import { usePathname } from 'next/navigation'
 
 const NAV = [
   { label: 'Dashboard', href: '/dashboard' },
-  { label: 'Tasks', href: '/tasks' },
-  { label: 'Pipeline', href: '/pipeline' },
-  { label: 'Memory', href: '/memory' },
-  { label: 'Compliance', href: '/compliance' },
+  { label: 'Tasks',     href: '/tasks' },
+  { label: 'Pipeline',  href: '/pipeline' },
+  { label: 'Memory',    href: '/memory' },
+  { label: 'Compliance',href: '/compliance' },
   { label: 'Knowledge', href: '/knowledge' },
-  { label: 'Settings', href: '/settings' },
+  { label: 'Settings',  href: '/settings' },
+]
+
+const QUICK_LINKS = [
+  {
+    group: 'MLS & Data',
+    links: [
+      { label: 'Stellar MLS',                    href: 'https://www.stellarmls.com/' },
+      { label: 'OC Property Appraiser',          href: 'https://www.ocpafl.org/' },
+      { label: 'OC Tax Collector',               href: 'https://www.octaxcol.com/' },
+    ],
+  },
+  {
+    group: 'Contracts & Compliance',
+    links: [
+      { label: 'FL Realtors Forms (FAR)',        href: 'https://www.floridarealtors.org/tools-research/forms' },
+      { label: 'DBPR License Lookup',            href: 'https://www.myfloridalicense.com/wl11.asp' },
+      { label: 'FREC Rules',                     href: 'https://www.myfloridalicense.com/DBPR/real-estate-commission/' },
+    ],
+  },
+  {
+    group: 'Lead & Prospecting',
+    links: [
+      { label: 'Zillow',                         href: 'https://www.zillow.com/' },
+      { label: 'Realtor.com',                    href: 'https://www.realtor.com/' },
+    ],
+  },
+  {
+    group: 'Training',
+    links: [
+      { label: 'Tom Ferry',                      href: 'https://www.tomferry.com/' },
+      { label: 'Bear Academy',                   href: '#' },
+    ],
+  },
+  {
+    group: 'Industry',
+    links: [
+      { label: 'NAR',                            href: 'https://www.nar.realtor/' },
+      { label: 'Florida Realtors',               href: 'https://www.floridarealtors.org/' },
+    ],
+  },
 ]
 
 export default function Sidebar() {
@@ -51,6 +91,41 @@ export default function Sidebar() {
           )
         })}
       </nav>
+
+      {/* Quick Links */}
+      <div style={{ borderTop: '1px solid var(--bt-border)', padding: '12px 20px 4px' }}>
+        <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--bt-text-dim)', marginBottom: 8 }}>
+          Quick Links
+        </div>
+        {QUICK_LINKS.map((group) => (
+          <div key={group.group} style={{ marginBottom: 10 }}>
+            <div style={{ fontSize: 8, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--bt-accent)', opacity: 0.7, marginBottom: 4 }}>
+              {group.group}
+            </div>
+            {group.links.map((link) => (
+              <a
+                key={link.href}
+                href={link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  padding: '2px 0',
+                  fontSize: 11,
+                  color: 'var(--bt-text-dim)',
+                  textDecoration: 'none',
+                  lineHeight: 1.6,
+                }}
+              >
+                {link.label}
+                <span style={{ fontSize: 8, opacity: 0.5 }}>↗</span>
+              </a>
+            ))}
+          </div>
+        ))}
+      </div>
 
       {/* Footer */}
       <div style={{ padding: '14px 20px', borderTop: '1px solid var(--bt-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
