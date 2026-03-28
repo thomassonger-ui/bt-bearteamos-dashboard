@@ -57,9 +57,9 @@ export default function CompliancePage() {
   if (loading) return <div style={{ padding: 40, color: 'var(--bt-text-dim)' }}>Loading…</div>
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar />
-      <main style={{ flex: 1, padding: '24px 28px', overflowY: 'auto' }}>
+      <main style={{ flex: 1, overflowY: 'auto', padding: '24px 28px', overflowY: 'auto' }}>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Compliance</div>
