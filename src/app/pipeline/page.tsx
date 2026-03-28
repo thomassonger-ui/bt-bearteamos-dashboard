@@ -22,7 +22,8 @@ export default function PipelinePage() {
   const [chatLoading, setChatLoading] = useState(false)
   const [listening, setListening] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
-  const recognitionRef = useRef<SpeechRecognition | null>(null)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null)
 
   useEffect(() => {
     async function load() {
@@ -75,9 +76,9 @@ export default function PipelinePage() {
   }
 
   function toggleMic() {
-    const SpeechRecognition =
-      (window as Window & typeof globalThis & { SpeechRecognition?: typeof globalThis.SpeechRecognition; webkitSpeechRecognition?: typeof globalThis.SpeechRecognition }).SpeechRecognition ||
-      (window as Window & typeof globalThis & { SpeechRecognition?: typeof globalThis.SpeechRecognition; webkitSpeechRecognition?: typeof globalThis.SpeechRecognition }).webkitSpeechRecognition
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const w = window as any
+    const SpeechRecognition = w.SpeechRecognition || w.webkitSpeechRecognition
 
     if (!SpeechRecognition) {
       alert('Speech recognition not supported in this browser.')
@@ -96,7 +97,8 @@ export default function PipelinePage() {
     recognition.lang = 'en-US'
     recognitionRef.current = recognition
 
-    recognition.onresult = (event) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript
       setChatInput(prev => prev ? prev + ' ' + transcript : transcript)
       setListening(false)
