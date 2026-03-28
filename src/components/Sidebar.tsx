@@ -25,7 +25,7 @@ const QUICK_LINKS = [
   {
     group: 'Contracts & Compliance',
     links: [
-      { label: 'FL Realtors Forms (FAR)',        href: 'https://www.floridarealtors.org/tools-research/forms' },
+      { label: 'FL Realtors Forms (FAR)',        href: 'https://forms.floridarealtors.org/index/signin' },
       { label: 'DBPR License Lookup',            href: 'https://www.myfloridalicense.com/wl11.asp' },
       { label: 'FREC Rules',                     href: 'https://www.myfloridalicense.com/DBPR/real-estate-commission/' },
     ],
