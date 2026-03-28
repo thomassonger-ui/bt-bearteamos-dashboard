@@ -165,6 +165,8 @@ reply must confirm what was done in 1 sentence, including the stage.`,
       if (!error && data) actionResult = { type: 'updated', lead: data }
       else console.error('[pipeline-chat] update error:', error?.message)
     } else if (extracted.action_type === 'create_lead' && extracted.lead_name) {
+      // lead_type must be resolved (buyer|seller|rental) before insert.
+      // If missing, the AI should have returned action_type='ask_type' upstream — this is a safety fallback.
       const stage = VALID_STAGES.includes(extracted.stage ?? '') ? extracted.stage! : 'new_lead'
       const lead_type = VALID_TYPES.includes(extracted.lead_type ?? '') ? extracted.lead_type! : null
 
