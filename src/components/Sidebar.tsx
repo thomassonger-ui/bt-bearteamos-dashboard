@@ -18,39 +18,39 @@ const QUICK_LINKS = [
   {
     group: 'MLS & Data',
     links: [
-      { label: 'Stellar MLS',                    href: 'https://www.stellarmls.com/' },
-      { label: 'OC Property Appraiser',          href: 'https://www.ocpafl.org/' },
-      { label: 'OC Tax Collector',               href: 'https://www.octaxcol.com/' },
+      { label: 'Stellar MLS',               href: 'https://www.stellarmls.com/' },
+      { label: 'OC Property Appraiser',     href: 'https://www.ocpafl.org/' },
+      { label: 'OC Tax Collector',          href: 'https://www.octaxcol.com/' },
     ],
   },
   {
     group: 'Contracts & Compliance',
     links: [
-      { label: 'FL Realtors Forms (FAR)',        href: 'https://forms.floridarealtors.org/index/signin' },
-      { label: 'DBPR License Lookup',            href: 'https://www.myfloridalicense.com/wl11.asp' },
-      { label: 'FREC Rules',                     href: 'https://www.myfloridalicense.com/DBPR/real-estate-commission/' },
-      { label: 'BrokerMint',                       href: 'https://control.brokermint.com/users/sign_in' },
+      { label: 'FL Realtors Forms (FAR)',   href: 'https://forms.floridarealtors.org/index/signin' },
+      { label: 'DBPR License Lookup',       href: 'https://www.myfloridalicense.com/wl11.asp' },
+      { label: 'FREC Rules',                href: 'https://www.myfloridalicense.com/DBPR/real-estate-commission/' },
+      { label: 'BrokerMint',                href: 'https://control.brokermint.com/users/sign_in' },
     ],
   },
   {
     group: 'Lead & Prospecting',
     links: [
-      { label: 'Zillow',                         href: 'https://www.zillow.com/' },
-      { label: 'Realtor.com',                    href: 'https://www.realtor.com/' },
+      { label: 'Zillow',                    href: 'https://www.zillow.com/' },
+      { label: 'Realtor.com',               href: 'https://www.realtor.com/' },
     ],
   },
   {
     group: 'Training',
     links: [
-      { label: 'Tom Ferry',                      href: 'https://www.tomferry.com/' },
-      { label: 'Bear Academy',                   href: 'https://worldteachpathways.moodlecloud.com/login/index.php?loginredirect=1' },
+      { label: 'Tom Ferry',                 href: 'https://www.tomferry.com/' },
+      { label: 'Bear Academy',              href: 'https://worldteachpathways.moodlecloud.com/login/index.php?loginredirect=1' },
     ],
   },
   {
     group: 'Industry',
     links: [
-      { label: 'NAR',                            href: 'https://www.nar.realtor/' },
-      { label: 'Florida Realtors',               href: 'https://www.floridarealtors.org/' },
+      { label: 'NAR',                       href: 'https://www.nar.realtor/' },
+      { label: 'Florida Realtors',          href: 'https://www.floridarealtors.org/' },
     ],
   },
 ]
@@ -69,10 +69,13 @@ export default function Sidebar() {
       background: 'var(--bt-surface)',
       borderRight: '1px solid var(--bt-border)',
       display: 'flex', flexDirection: 'column',
-      minHeight: '100vh',
+      height: '100vh',
+      position: 'sticky',
+      top: 0,
+      overflow: 'hidden',
     }}>
       {/* Logo */}
-      <div style={{ padding: '20px 20px 16px', borderBottom: '1px solid var(--bt-border)' }}>
+      <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--bt-border)', flexShrink: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', color: 'var(--bt-accent)' }}>
           BEARTEAM<span style={{ color: 'var(--bt-text-dim)' }}>OS</span>
         </div>
@@ -80,13 +83,13 @@ export default function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '12px 0' }}>
+      <nav style={{ padding: '8px 0', flexShrink: 0 }}>
         {NAV.map((item) => {
           const active = path === item.href || path.startsWith(item.href + '/')
           return (
             <Link key={item.href} href={item.href} style={{
               display: 'block',
-              padding: '9px 20px',
+              padding: '7px 20px',
               fontSize: 13,
               color: active ? 'var(--bt-text)' : 'var(--bt-text-dim)',
               background: active ? 'var(--bt-muted)' : 'transparent',
@@ -99,14 +102,20 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Quick Links */}
-      <div style={{ borderTop: '1px solid var(--bt-border)', padding: '12px 20px 4px' }}>
-        <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--bt-text-dim)', marginBottom: 8 }}>
+      {/* Quick Links — scrollable, fills remaining space */}
+      <div style={{
+        flex: 1,
+        overflowY: 'auto',
+        borderTop: '1px solid var(--bt-border)',
+        padding: '10px 20px 4px',
+        scrollbarWidth: 'none',
+      }}>
+        <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--bt-text-dim)', marginBottom: 6 }}>
           Quick Links
         </div>
         {QUICK_LINKS.map((group) => (
-          <div key={group.group} style={{ marginBottom: 10 }}>
-            <div style={{ fontSize: 8, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--bt-accent)', opacity: 0.7, marginBottom: 4 }}>
+          <div key={group.group} style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 8, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--bt-accent)', opacity: 0.7, marginBottom: 3 }}>
               {group.group}
             </div>
             {group.links.map((link) => (
@@ -119,11 +128,11 @@ export default function Sidebar() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: 4,
-                  padding: '2px 0',
+                  padding: '1px 0',
                   fontSize: 11,
                   color: 'var(--bt-text-dim)',
                   textDecoration: 'none',
-                  lineHeight: 1.6,
+                  lineHeight: 1.5,
                 }}
               >
                 {link.label}
@@ -135,7 +144,7 @@ export default function Sidebar() {
       </div>
 
       {/* Footer */}
-      <div style={{ padding: '14px 20px', borderTop: '1px solid var(--bt-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ padding: '10px 20px', borderTop: '1px solid var(--bt-border)', display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
         {isAdmin && (
           <Link href="/broker" style={{
             fontSize: 11,
