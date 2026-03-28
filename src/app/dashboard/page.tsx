@@ -97,9 +97,9 @@ export default function DashboardPage() {
   )
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar />
-      <main style={{ flex: 1, padding: '24px 28px', overflowY: 'auto' }}>
+      <main style={{ flex: 1, overflowY: 'auto', padding: '24px 28px', overflowY: 'auto' }}>
         <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
           <DailySummaryCard agent={agent} tasks={tasks} compliance={compliance} />
           <TaskList agentId={agent.id} tasks={tasks} onUpdate={handleTaskUpdate} />
