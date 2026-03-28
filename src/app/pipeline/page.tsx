@@ -147,9 +147,12 @@ export default function PipelinePage() {
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar />
-      <main style={{ flex: 1, padding: '24px 28px', overflowY: 'auto', height: '100%' }}>
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
+      <main style={{ flex: 1, overflowY: 'auto', height: '100%' }}>
+        {/* Outer flex: left = main content, right = sticky Coach panel */}
+        <div style={{ display: 'flex', gap: 0, alignItems: 'flex-start', height: '100%' }}>
+
+        {/* ── Left: main scrollable content ── */}
+        <div style={{ flex: 1, minWidth: 0, padding: '24px 28px' }}>
 
           {/* Title */}
           <div style={{ marginBottom: 16 }}>
@@ -318,14 +321,23 @@ export default function PipelinePage() {
 
           <PipelineBoard pipeline={pipeline} onContact={handleContact} onSelectLead={setSelectedLead} selectedLeadId={selectedLead?.id ?? null} />
 
-          {/* Coach / Scout — below pipeline board, full width */}
-          <div style={{ marginTop: 20 }}>
-            <CoachPanel selectedLead={selectedLead} />
-          </div>
+        </div>{/* end left col */}
 
-        </div>{/* end main content col */}
+        {/* ── Right: sticky Coach / Scout panel ── */}
+        <div style={{
+          width: 270,
+          flexShrink: 0,
+          position: 'sticky',
+          top: 0,
+          height: '100vh',
+          overflowY: 'auto',
+          padding: '24px 16px 24px 0',
+          borderLeft: '1px solid var(--bt-border)',
+        }}>
+          <CoachPanel selectedLead={selectedLead} />
+        </div>
 
-        </div>{/* end outer wrapper */}
+        </div>{/* end outer flex */}
       </main>
     </div>
   )
