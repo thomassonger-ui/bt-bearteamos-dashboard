@@ -5,6 +5,8 @@ import type { Pipeline } from '@/types'
 interface Props {
   pipeline: Pipeline[]
   onContact?: (pipelineId: string, leadName: string) => Promise<void>
+  onSelectLead?: (lead: Pipeline | null) => void
+  selectedLeadId?: string | null
 }
 
 const STAGE_ORDER = [
@@ -50,10 +52,15 @@ function daysSince(isoString: string): number {
   return Math.floor((Date.now() - new Date(isoString).getTime()) / (1000 * 60 * 60 * 24))
 }
 
-export default function PipelineBoard({ pipeline, onContact }: Props) {
+export default function PipelineBoard({ pipeline, onContact, onSelectLead, selectedLeadId }: Props) {
   const knownSet = new Set(STAGE_ORDER)
   const legacyStages = [...new Set(pipeline.map((p) => p.stage))].filter((s) => !knownSet.has(s))
   const allStages = [...STAGE_ORDER, ...legacyStages]
+
+  function handleLeadClick(lead: Pipeline) {
+    if (!onSelectLead) return
+    onSelectLead(selectedLeadId === lead.id ? null : lead)
+  }
 
   return (
     <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6 }}>
@@ -82,11 +89,21 @@ export default function PipelineBoard({ pipeline, onContact }: Props) {
                   const days = daysSince(lead.last_contact)
                   const stale = days >= 3
                   const typeStyle = lead.lead_type ? TYPE_STYLE[lead.lead_type] : null
+                  const isSelected = selectedLeadId === lead.id
                   return (
-                    <div key={lead.id} style={{
-                      padding: '10px 14px', background: 'var(--bt-muted)', borderRadius: 4, marginBottom: 6,
-                      border: stale ? '1px solid rgba(224,82,82,0.3)' : '1px solid transparent',
-                    }}>
+                    <div
+                      key={lead.id}
+                      onClick={() => handleLeadClick(lead)}
+                      style={{
+                        padding: '10px 14px', background: 'var(--bt-muted)', borderRadius: 4, marginBottom: 6,
+                        border: isSelected
+                          ? '1px solid var(--bt-accent)'
+                          : stale ? '1px solid rgba(224,82,82,0.3)' : '1px solid transparent',
+                        cursor: onSelectLead ? 'pointer' : 'default',
+                        transition: 'border-color 0.15s',
+                        outline: isSelected ? '1px solid rgba(123,183,183,0.2)' : 'none',
+                      }}
+                    >
                       {/* Row 1: name + type badge + date + log contact */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -100,6 +117,9 @@ export default function PipelineBoard({ pipeline, onContact }: Props) {
                               {typeStyle.label}
                             </span>
                           )}
+                          {isSelected && (
+                            <span style={{ fontSize: 9, color: 'var(--bt-accent)', fontWeight: 700 }}>● coaching</span>
+                          )}
                         </div>
                         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                           <div style={{ fontSize: 11, color: stale ? 'var(--bt-red)' : 'var(--bt-text-dim)' }}>
@@ -107,7 +127,7 @@ export default function PipelineBoard({ pipeline, onContact }: Props) {
                           </div>
                           {onContact && stage !== 'closed' && (
                             <button
-                              onClick={() => onContact(lead.id, lead.lead_name)}
+                              onClick={(e) => { e.stopPropagation(); onContact(lead.id, lead.lead_name) }}
                               style={{ fontSize: 10, padding: '2px 7px', border: '1px solid var(--bt-accent)', background: 'transparent', color: 'var(--bt-accent)', borderRadius: 3, cursor: 'pointer' }}
                             >
                               Log Contact
@@ -125,6 +145,7 @@ export default function PipelineBoard({ pipeline, onContact }: Props) {
                               target="_blank"
                               rel="noopener noreferrer"
                               title="Open in Messages"
+                              onClick={(e) => e.stopPropagation()}
                               style={{ fontSize: 11, color: 'var(--bt-accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}
                             >
                               📱 {lead.phone}
@@ -136,6 +157,7 @@ export default function PipelineBoard({ pipeline, onContact }: Props) {
                               target="_blank"
                               rel="noopener noreferrer"
                               title="Compose in Gmail"
+                              onClick={(e) => e.stopPropagation()}
                               style={{ fontSize: 11, color: 'var(--bt-accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}
                             >
                               ✉ {lead.email}
