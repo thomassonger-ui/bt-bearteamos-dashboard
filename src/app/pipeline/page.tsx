@@ -147,21 +147,21 @@ export default function PipelinePage() {
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar />
-      <main style={{ flex: 1, overflowY: 'auto', height: '100%' }}>
+      <main style={{ flex: 1, overflow: 'hidden', height: '100%' }}>
         {/* Outer flex: left = main content, right = sticky Coach panel */}
-        <div style={{ display: 'flex', gap: 0, alignItems: 'flex-start', height: '100%' }}>
+        <div style={{ display: 'flex', height: '100%' }}>
 
-        {/* ── Left: main scrollable content ── */}
-        <div style={{ flex: 1, minWidth: 0, padding: '24px 28px' }}>
+        {/* ── Left: fixed height, internal scroll only on pipeline board ── */}
+        <div style={{ flex: 1, minWidth: 0, padding: '16px 20px 0 20px', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
-          {/* Title */}
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Pipeline</div>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>{agent?.name ?? '—'}</div>
+          {/* Title — compact */}
+          <div style={{ marginBottom: 10, flexShrink: 0 }}>
+            <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>Pipeline</div>
+            <div style={{ fontSize: 17, fontWeight: 700 }}>{agent?.name ?? '—'}</div>
           </div>
 
-          {/* 90-day chart + Pipeline AI — side by side, equal height */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20, alignItems: 'stretch' }}>
+          {/* 90-day chart + Pipeline AI — side by side, fixed height */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10, alignItems: 'stretch', flexShrink: 0, height: 200 }}>
 
             {/* Left: 90-day Activity Chart */}
             {agent && (
@@ -272,67 +272,54 @@ export default function PipelinePage() {
             </div>
           </div>
 
-          {/* Performance Strip */}
-          {metrics && (
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 10 }}>
-                {[
-                  { label: 'Calls This Week', value: metrics.calls_this_week, target: TARGETS.calls, pace: metrics.call_pace },
-                  { label: 'Appointments', value: metrics.appointments_this_week, target: TARGETS.appointments, pace: metrics.appointment_pace },
-                  { label: 'Active Pipeline', value: metrics.active_clients + metrics.under_contract, target: null, pace: null },
-                  { label: 'Listing Projection', value: metrics.listing_projection.toFixed(1), target: null, pace: null },
-                ].map((s) => (
-                  <div key={s.label} style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '14px 18px' }}>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: s.pace !== null ? paceColor(s.pace) : 'var(--bt-text)' }}>
-                      {s.value}{s.target ? <span style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginLeft: 4 }}>/ {s.target}</span> : null}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginTop: 2 }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--bt-text-dim)', fontStyle: 'italic' }}>
-                {insightLine(metrics)}
-              </div>
-            </div>
-          )}
-
-          {/* Lead Stats */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+          {/* Compact stats bar — all 8 metrics in one row */}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexShrink: 0, flexWrap: 'wrap' }}>
             {[
-              { label: 'Total Leads', value: pipeline.length },
-              { label: 'Under Contract', value: pipeline.filter((p) => p.stage === 'under_contract').length },
-              { label: 'Stale (3+ days)', value: stalled.length },
-              { label: 'Closed', value: pipeline.filter((p) => p.stage === 'closed').length },
+              ...(metrics ? [
+                { label: 'Calls', value: metrics.calls_this_week, target: TARGETS.calls, color: paceColor(metrics.call_pace) },
+                { label: 'Appts', value: metrics.appointments_this_week, target: TARGETS.appointments, color: paceColor(metrics.appointment_pace) },
+                { label: 'Active', value: metrics.active_clients + metrics.under_contract, color: 'var(--bt-text)' },
+                { label: 'Proj.', value: metrics.listing_projection.toFixed(1), color: 'var(--bt-text)' },
+              ] : []),
+              { label: 'Leads', value: pipeline.length, color: 'var(--bt-text)' },
+              { label: 'Contract', value: pipeline.filter(p => p.stage === 'under_contract').length, color: 'var(--bt-text)' },
+              { label: 'Stale', value: stalled.length, color: stalled.length > 0 ? 'var(--bt-red)' : 'var(--bt-text)' },
+              { label: 'Closed', value: pipeline.filter(p => p.stage === 'closed').length, color: 'var(--bt-green)' },
             ].map((s) => (
-              <div key={s.label} style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '14px 18px' }}>
-                <div style={{ fontSize: 22, fontWeight: 700, color: s.label === 'Stale (3+ days)' && s.value > 0 ? 'var(--bt-red)' : 'var(--bt-text)' }}>
-                  {s.value}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginTop: 2 }}>{s.label}</div>
+              <div key={s.label} style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 4, padding: '4px 10px', display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: s.color }}>{s.value}{'target' in s && s.target ? <span style={{ fontSize: 9, color: 'var(--bt-text-dim)', marginLeft: 2 }}>/{s.target}</span> : null}</span>
+                <span style={{ fontSize: 9, color: 'var(--bt-text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{s.label}</span>
               </div>
             ))}
+            {metrics && (
+              <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', fontStyle: 'italic', display: 'flex', alignItems: 'center', paddingLeft: 4 }}>
+                {insightLine(metrics)}
+              </div>
+            )}
           </div>
 
           {stalled.length > 0 && (
-            <div style={{ marginBottom: 20, padding: '12px 16px', background: 'rgba(224,82,82,0.08)', border: '1px solid rgba(224,82,82,0.3)', borderRadius: 6, fontSize: 13, color: 'var(--bt-red)' }}>
-              ⚠ {stalled.length} lead{stalled.length > 1 ? 's' : ''} with no contact in 3+ days — engine will generate follow-up tasks.
+            <div style={{ marginBottom: 6, padding: '5px 10px', background: 'rgba(224,82,82,0.08)', border: '1px solid rgba(224,82,82,0.3)', borderRadius: 4, fontSize: 11, color: 'var(--bt-red)', flexShrink: 0 }}>
+              ⚠ {stalled.length} lead{stalled.length > 1 ? 's' : ''} with no contact in 3+ days
             </div>
           )}
 
-          <PipelineBoard pipeline={pipeline} onContact={handleContact} onSelectLead={setSelectedLead} selectedLeadId={selectedLead?.id ?? null} />
+          {/* Pipeline board — takes remaining space, scrolls internally */}
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingBottom: 16 }}>
+            <PipelineBoard pipeline={pipeline} onContact={handleContact} onSelectLead={setSelectedLead} selectedLeadId={selectedLead?.id ?? null} />
+          </div>
 
         </div>{/* end left col */}
 
-        {/* ── Right: sticky Coach / Scout panel ── */}
+        {/* ── Right: Coach / Scout panel — full height, no scroll ── */}
         <div style={{
           width: 270,
           flexShrink: 0,
-          position: 'sticky',
-          top: 0,
-          height: '100vh',
-          overflowY: 'auto',
-          padding: '24px 16px 24px 0',
+          height: '100%',
+          padding: '16px 12px 16px 0',
           borderLeft: '1px solid var(--bt-border)',
+          display: 'flex',
+          flexDirection: 'column',
         }}>
           <CoachPanel selectedLead={selectedLead} />
         </div>
