@@ -169,7 +169,7 @@ export default function CoachPanel({ selectedLead }: CoachPanelProps) {
             <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginBottom: 10, fontStyle: 'italic' }}>
               {selectedLead
                 ? `Coaching for ${selectedLead.lead_name}. What's happening on the call?`
-                : 'What's happening on your call? I\'ll give you the words.'}
+                : "What's happening on your call? I'll give you the words."}
             </div>
             {/* Quick prompts */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
