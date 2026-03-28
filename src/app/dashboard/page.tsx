@@ -6,57 +6,34 @@ import DailySummaryCard from '@/components/DailySummaryCard'
 import TaskList from '@/components/TaskList'
 import { getAgent, getFirstAgent, getTasks, getCompliance, updateTaskStatus, logActivity } from '@/lib/queries'
 import { runEngine } from '@/lib/engine'
-import type { Agent, Task, ComplianceRecord } from '@/types'
-
-// Wraps a promise with a timeout — resolves null instead of hanging
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
-  return Promise.race([
-    promise,
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
-  ])
-}
+import type { Agent, Task, ActivityLog, ComplianceRecord } from '@/types'
 
 export default function DashboardPage() {
   const [agent, setAgent] = useState<Agent | null>(null)
   const [tasks, setTasks] = useState<Task[]>([])
   const [compliance, setCompliance] = useState<ComplianceRecord[]>([])
   const [loading, setLoading] = useState(true)
-  const [dbError, setDbError] = useState(false)
 
   useEffect(() => {
     async function init() {
-      try {
-        // Get agent ID from session, fallback to first agent — 5s timeout
-        const storedId = typeof window !== 'undefined' ? sessionStorage.getItem('bt_agent_id') : null
-        const agentData = await withTimeout(
-          storedId ? getAgent(storedId) : getFirstAgent(),
-          5000
-        )
+      // Get agent ID from session, fallback to first agent
+      const storedId = typeof window !== 'undefined' ? sessionStorage.getItem('bt_agent_id') : null
+      const agentData = storedId ? await getAgent(storedId) : await getFirstAgent()
+      if (!agentData) { setLoading(false); return }
 
-        if (!agentData) {
-          setDbError(true)
-          setLoading(false)
-          return
-        }
+      // Run engine on dashboard load (checks rules, marks overdue)
+      await runEngine(agentData.id)
 
-        // Run engine non-blocking — don't await, don't let it gate the dashboard
-        void runEngine(agentData.id).catch((e) => console.error('[engine]', e))
+      // Fetch fresh data after engine runs
+      const [freshTasks, freshCompliance] = await Promise.all([
+        getTasks(agentData.id),
+        getCompliance(agentData.id),
+      ])
 
-        // Fetch data with timeout
-        const [freshTasks, freshCompliance] = await Promise.all([
-          withTimeout(getTasks(agentData.id), 5000).then(r => r ?? []),
-          withTimeout(getCompliance(agentData.id), 5000).then(r => r ?? []),
-        ])
-
-        setAgent(agentData)
-        setTasks(freshTasks)
-        setCompliance(freshCompliance)
-      } catch (err) {
-        console.error('[dashboard init]', err)
-        setDbError(true)
-      } finally {
-        setLoading(false)
-      }
+      setAgent(agentData)
+      setTasks(freshTasks)
+      setCompliance(freshCompliance)
+      setLoading(false)
     }
     init()
   }, [])
@@ -76,30 +53,22 @@ export default function DashboardPage() {
       })
     }
 
+    // Refresh tasks
     if (agent) setTasks(await getTasks(agent.id))
   }
 
   if (loading) return <LoadingScreen />
 
-  if (dbError || !agent) return (
-    <div style={{
-      display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center',
-      background: 'var(--bt-black)', flexDirection: 'column', gap: 12,
-    }}>
-      <div style={{ fontSize: 13, color: 'var(--bt-text-dim)', textAlign: 'center' }}>
-        {dbError
-          ? 'Database not configured yet. Run the Supabase setup SQL to activate the system.'
-          : 'No agent record found.'
-        }
-      </div>
-      <a href="/login" style={{ fontSize: 12, color: 'var(--bt-accent)' }}>← Back to login</a>
+  if (!agent) return (
+    <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', color: 'var(--bt-text-dim)' }}>
+      No agent found. <a href="/login" style={{ color: 'var(--bt-accent)', marginLeft: 8 }}>Login</a>
     </div>
   )
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar />
-      <main style={{ flex: 1, overflowY: 'auto', padding: '24px 28px', overflowY: 'auto' }}>
+      <main style={{ flex: 1, padding: '24px 28px', overflowY: 'auto', height: '100%' }}>
         <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
           <DailySummaryCard agent={agent} tasks={tasks} compliance={compliance} />
           <TaskList agentId={agent.id} tasks={tasks} onUpdate={handleTaskUpdate} />
