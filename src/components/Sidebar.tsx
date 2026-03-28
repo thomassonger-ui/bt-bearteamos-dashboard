@@ -41,7 +41,7 @@ const QUICK_LINKS = [
     group: 'Training',
     links: [
       { label: 'Tom Ferry',                      href: 'https://www.tomferry.com/' },
-      { label: 'Bear Academy',                   href: '#' },
+      { label: 'Bear Academy',                   href: 'https://worldteachpathways.moodlecloud.com/login/index.php?loginredirect=1' },
     ],
   },
   {
