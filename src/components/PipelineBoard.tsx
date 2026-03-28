@@ -19,31 +19,31 @@ const STAGE_ORDER = [
 ]
 
 const STAGE_LABEL: Record<string, string> = {
-  new_lead:          'New Lead',
+  new_lead:           'New Lead',
   attempting_contact: 'Attempting Contact',
-  contacted:         'Contacted',
-  appointment_set:   'Appointment Set',
-  active_client:     'Active Client',
-  under_contract:    'Under Contract',
-  closed:            'Closed',
-  stalled:           'Stalled',
+  contacted:          'Contacted',
+  appointment_set:    'Appointment Set',
+  active_client:      'Active Client',
+  under_contract:     'Under Contract',
+  closed:             'Closed',
+  stalled:            'Stalled',
 }
 
 const STAGE_COLOR: Record<string, string> = {
-  new_lead:          'var(--bt-accent)',
+  new_lead:           'var(--bt-accent)',
   attempting_contact: '#e0a040',
-  contacted:         '#6b9cf5',
-  appointment_set:   '#a084e8',
-  active_client:     '#4fbf8a',
-  under_contract:    'var(--bt-green)',
-  closed:            'var(--bt-green)',
-  stalled:           'var(--bt-red)',
+  contacted:          '#6b9cf5',
+  appointment_set:    '#a084e8',
+  active_client:      '#4fbf8a',
+  under_contract:     'var(--bt-green)',
+  closed:             'var(--bt-green)',
+  stalled:            'var(--bt-red)',
 }
 
 const TYPE_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  buyer:  { bg: 'rgba(107,156,245,0.15)', color: '#6b9cf5',           label: 'BUYER' },
-  seller: { bg: 'rgba(160,132,232,0.15)', color: '#a084e8',           label: 'SELLER' },
-  rental: { bg: 'rgba(209,166,84,0.15)',  color: 'var(--bt-accent)',  label: 'RENTAL' },
+  buyer:  { bg: 'rgba(107,156,245,0.15)', color: '#6b9cf5',          label: 'BUYER' },
+  seller: { bg: 'rgba(160,132,232,0.15)', color: '#a084e8',          label: 'SELLER' },
+  rental: { bg: 'rgba(209,166,84,0.15)',  color: 'var(--bt-accent)', label: 'RENTAL' },
 }
 
 function daysSince(isoString: string): number {
@@ -51,7 +51,6 @@ function daysSince(isoString: string): number {
 }
 
 export default function PipelineBoard({ pipeline, onContact }: Props) {
-  // Always show all 8 stages in order, then any unknown legacy stages appended
   const knownSet = new Set(STAGE_ORDER)
   const legacyStages = [...new Set(pipeline.map((p) => p.stage))].filter((s) => !knownSet.has(s))
   const allStages = [...STAGE_ORDER, ...legacyStages]
@@ -88,6 +87,7 @@ export default function PipelineBoard({ pipeline, onContact }: Props) {
                       padding: '10px 14px', background: 'var(--bt-muted)', borderRadius: 4, marginBottom: 6,
                       border: stale ? '1px solid rgba(224,82,82,0.3)' : '1px solid transparent',
                     }}>
+                      {/* Row 1: name + type badge + date + log contact */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                           <div style={{ fontWeight: 500, fontSize: 13 }}>{lead.lead_name}</div>
@@ -115,6 +115,29 @@ export default function PipelineBoard({ pipeline, onContact }: Props) {
                           )}
                         </div>
                       </div>
+
+                      {/* Row 2: contact info — phone · email · address */}
+                      {(lead.phone || lead.email || lead.address) && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', marginTop: 4 }}>
+                          {lead.phone && (
+                            <a href={`tel:${lead.phone}`} style={{ fontSize: 11, color: 'var(--bt-text-dim)', textDecoration: 'none' }}>
+                              📞 {lead.phone}
+                            </a>
+                          )}
+                          {lead.email && (
+                            <a href={`mailto:${lead.email}`} style={{ fontSize: 11, color: 'var(--bt-text-dim)', textDecoration: 'none' }}>
+                              ✉ {lead.email}
+                            </a>
+                          )}
+                          {lead.address && (
+                            <span style={{ fontSize: 11, color: 'var(--bt-text-dim)' }}>
+                              📍 {lead.address}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Row 3: notes */}
                       {lead.notes && (
                         <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginTop: 3 }}>{lead.notes}</div>
                       )}
