@@ -272,23 +272,40 @@ export default function PipelinePage() {
             </div>
           </div>
 
-          {/* Compact stats bar — all 8 metrics in one row */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 4, flexShrink: 0, flexWrap: 'wrap' }}>
+          {/* KPI bar — 8 cards, equal width, full row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 8, marginBottom: 4, flexShrink: 0 }}>
             {[
               ...(metrics ? [
                 { label: 'Calls', value: metrics.calls_this_week, target: TARGETS.calls, color: paceColor(metrics.call_pace) },
                 { label: 'Appts', value: metrics.appointments_this_week, target: TARGETS.appointments, color: paceColor(metrics.appointment_pace) },
                 { label: 'Active', value: metrics.active_clients + metrics.under_contract, color: 'var(--bt-text)' },
                 { label: 'Proj.', value: metrics.listing_projection.toFixed(1), color: 'var(--bt-text)' },
-              ] : []),
+              ] : [
+                { label: 'Calls', value: '—', color: 'var(--bt-text-dim)' },
+                { label: 'Appts', value: '—', color: 'var(--bt-text-dim)' },
+                { label: 'Active', value: '—', color: 'var(--bt-text-dim)' },
+                { label: 'Proj.', value: '—', color: 'var(--bt-text-dim)' },
+              ]),
               { label: 'Leads', value: pipeline.length, color: 'var(--bt-text)' },
               { label: 'Contract', value: pipeline.filter(p => p.stage === 'under_contract').length, color: 'var(--bt-text)' },
               { label: 'Stale', value: stalled.length, color: stalled.length > 0 ? 'var(--bt-red)' : 'var(--bt-text)' },
               { label: 'Closed', value: pipeline.filter(p => p.stage === 'closed').length, color: 'var(--bt-green)' },
             ].map((s) => (
-              <div key={s.label} style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 4, padding: '6px 14px', display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 54 }}>
-                <span style={{ fontSize: 20, fontWeight: 700, lineHeight: 1, color: s.color }}>{s.value}{'target' in s && s.target ? <span style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginLeft: 2 }}>/{s.target}</span> : null}</span>
-                <span style={{ fontSize: 9, color: 'var(--bt-text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 3 }}>{s.label}</span>
+              <div key={s.label} style={{
+                background: 'var(--bt-surface)',
+                border: '1px solid var(--bt-border)',
+                borderRadius: 5,
+                padding: '10px 6px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 3,
+              }}>
+                <span style={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: s.color }}>
+                  {s.value}{'target' in s && s.target ? <span style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginLeft: 2 }}>/{s.target}</span> : null}
+                </span>
+                <span style={{ fontSize: 9, color: 'var(--bt-text-dim)', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>{s.label}</span>
               </div>
             ))}
           </div>
