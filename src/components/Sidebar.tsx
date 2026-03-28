@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 
@@ -56,6 +57,11 @@ const QUICK_LINKS = [
 
 export default function Sidebar() {
   const path = usePathname()
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    setIsAdmin(sessionStorage.getItem('bt_is_admin') === 'true')
+  }, [])
 
   return (
     <div style={{
@@ -130,9 +136,25 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div style={{ padding: '14px 20px', borderTop: '1px solid var(--bt-border)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Link href="/broker" style={{ fontSize: 11, color: 'var(--bt-accent)', letterSpacing: '0.06em' }}>
-          Broker View →
-        </Link>
+        {isAdmin && (
+          <Link href="/broker" style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: 'var(--bt-black)',
+            background: 'var(--bt-accent)',
+            padding: '5px 10px',
+            borderRadius: 4,
+            letterSpacing: '0.04em',
+            textAlign: 'center',
+          }}>
+            Admin View →
+          </Link>
+        )}
+        {!isAdmin && (
+          <Link href="/broker" style={{ fontSize: 11, color: 'var(--bt-accent)', letterSpacing: '0.06em' }}>
+            Broker View →
+          </Link>
+        )}
         <Link href="/login" style={{ fontSize: 11, color: 'var(--bt-text-dim)' }}>
           Sign out
         </Link>
