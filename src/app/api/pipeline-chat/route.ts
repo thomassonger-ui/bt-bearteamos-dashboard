@@ -63,6 +63,9 @@ Return this exact JSON structure:
   "lead_type": "buyer|seller|rental or null",
   "stage": "one of the valid stages above, or null",
   "notes": "any details or null",
+  "phone": "phone number as string or null",
+  "email": "email address or null",
+  "address": "property or home address or null",
   "target_lead_id": "existing lead id if updating or deleting, otherwise null"
 }
 
@@ -73,15 +76,22 @@ Lead type rules (CRITICAL):
 - "seller", "selling", "listing", "wants to sell" → lead_type = "seller"
 - "rental", "renting", "tenant", "looking to rent" → lead_type = "rental"
 
+Contact info extraction:
+- Extract any phone number mentioned (e.g. "407-555-1234", "his number is 321 555 9876") → phone
+- Extract any email address mentioned → email
+- Extract any property address or neighborhood/city mentioned as where they live or are listing → address
+- For buyers: address = area they are searching (e.g. "looking in Winter Park") is fine as notes, not address
+- For sellers: address = the property address they are listing
+
 Stage mapping rules:
 - "new lead", "just got a lead", "intake" → stage = "new_lead"
 - "trying to reach", "attempting contact", "can't get through", "no answer", "left voicemail" → stage = "attempting_contact"
-- "called", "texted", "reached out", "sent email", "followed up", "got a response", "two-way", "met with", "spoke with" → stage = "contacted"
+- "called", "texted", "reached out", "sent email", "followed up", "got a response", "met with", "spoke with" → stage = "contacted"
 - "set appointment", "scheduled a showing", "meeting set", "appointment for" → stage = "appointment_set", notes = date/time
-- "working with", "active buyer", "active seller", "buyer active", "seller active", "actively looking", "in search mode", "touring homes" → stage = "active_client"
+- "working with", "active buyer", "active seller", "buyer active", "seller active", "actively looking", "touring homes" → stage = "active_client"
 - "under contract", "in contract", "signed", "went under contract" → stage = "under_contract"
 - "closed", "closing", "settlement", "funded" → stage = "closed"
-- "stalled", "cold", "no response", "went dark", "ghosting", "paused", "follow up later" → stage = "stalled"
+- "stalled", "cold", "no response", "went dark", "ghosting", "paused" → stage = "stalled"
 - new name with no other context → stage = "new_lead"
 
 Action type rules:
@@ -92,7 +102,7 @@ Action type rules:
 - action_type = "none" only if truly no client action at all
 
 For delete: match name in pipeline list to get target_lead_id.
-reply must confirm what was done in 1 sentence, including the stage.`,
+reply must confirm what was done in 1 sentence.`,
           },
           { role: 'user', content: lastMessage },
         ],
@@ -115,6 +125,9 @@ reply must confirm what was done in 1 sentence, including the stage.`,
       lead_type?: string
       stage?: string
       notes?: string
+      phone?: string
+      email?: string
+      address?: string
       target_lead_id?: string
     } = {}
 
@@ -152,7 +165,10 @@ reply must confirm what was done in 1 sentence, including the stage.`,
       const stage = VALID_STAGES.includes(extracted.stage ?? '') ? extracted.stage! : undefined
       const updates: Record<string, string> = { last_contact: new Date().toISOString() }
       if (stage) updates.stage = stage
-      if (extracted.notes) updates.notes = extracted.notes
+      if (extracted.notes)   updates.notes   = extracted.notes
+      if (extracted.phone)   updates.phone   = extracted.phone
+      if (extracted.email)   updates.email   = extracted.email
+      if (extracted.address) updates.address = extracted.address
       if (extracted.lead_type && VALID_TYPES.includes(extracted.lead_type)) updates.lead_type = extracted.lead_type
 
       const { data, error } = await supabase
@@ -173,11 +189,14 @@ reply must confirm what was done in 1 sentence, including the stage.`,
       const { data, error } = await supabase
         .from('pipeline')
         .insert({
-          agent_id: agentId,
+          agent_id:  agentId,
           lead_name: extracted.lead_name,
           stage,
           lead_type,
-          notes: extracted.notes || '',
+          notes:   extracted.notes   || '',
+          phone:   extracted.phone   || null,
+          email:   extracted.email   || null,
+          address: extracted.address || null,
           last_contact: new Date().toISOString(),
         })
         .select()
