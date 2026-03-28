@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Sidebar from '@/components/Sidebar'
 import PipelineBoard from '@/components/PipelineBoard'
 import ActivityChart from '@/components/ActivityChart'
+import CoachPanel from '@/components/CoachPanel'
 import { getFirstAgent, getAgent, getPipeline, updateLastContact, logActivity } from '@/lib/queries'
 import { getWeeklyMetrics, paceColor, insightLine, TARGETS } from '@/lib/metrics'
 import type { Agent, Pipeline } from '@/types'
@@ -146,7 +147,8 @@ export default function PipelinePage() {
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar />
       <main style={{ flex: 1, padding: '24px 28px', overflowY: 'auto', height: '100%' }}>
-        <div style={{ maxWidth: 900, margin: '0 auto' }}>
+        <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', maxWidth: 1200, margin: '0 auto' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
 
           {/* Title */}
           <div style={{ marginBottom: 16 }}>
@@ -315,7 +317,14 @@ export default function PipelinePage() {
 
           <PipelineBoard pipeline={pipeline} onContact={handleContact} />
 
+        </div>{/* end main content col */}
+
+        {/* Right rail: Coach / Scout */}
+        <div style={{ flexShrink: 0, width: 260, position: 'sticky', top: 0, maxHeight: 'calc(100vh - 48px)', display: 'flex', flexDirection: 'column' }}>
+          <CoachPanel />
         </div>
+
+        </div>{/* end outer flex */}
       </main>
     </div>
   )
