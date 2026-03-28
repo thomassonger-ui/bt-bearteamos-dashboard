@@ -6,13 +6,12 @@ export async function POST(req: Request) {
   try {
     const { username, password } = await req.json()
 
-    // Validate against AGENTS env var: JSON array of {name, username, password, stage}
     const agentsRaw = process.env.AGENTS
     if (!agentsRaw) {
       return NextResponse.json({ error: 'server_misconfigured' }, { status: 500 })
     }
 
-    let agents: { username: string; password: string }[]
+    let agents: { username: string; password: string; role?: string }[]
     try {
       agents = JSON.parse(agentsRaw)
     } catch {
@@ -34,13 +33,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'server_misconfigured' }, { status: 500 })
     }
 
-    const res = NextResponse.json({ ok: true })
+    const is_admin = match.role === 'admin'
+
+    const res = NextResponse.json({ ok: true, is_admin })
     res.cookies.set('bt_session', token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      maxAge: 60 * 60 * 24 * 7,
     })
     return res
   } catch {
