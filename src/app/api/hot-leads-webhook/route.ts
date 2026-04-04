@@ -3,6 +3,21 @@ import { upsertHotLead, updateHotLeadSourceStatus } from '@/lib/queries'
 
 const DEFAULT_AGENT_ID = 'a0000000-0000-0000-0000-000000000001'
 
+// Blocklist — skip leads from brokers, investors, wholesalers
+const BLOCKLIST = [
+  'we buy houses', 'cash offer', 'cash for your', 'investor', 'investment opportunity',
+  'wholesale', 'wholesaler', 'brokerage', 'licensed agent', 'licensed realtor',
+  'realty company', 'real estate group', 'property management', 'flip this',
+  'buy and hold', 'rental property for investors', 'turnkey investment',
+  'broker', 'MLS#', 'mls #', 'listed by', 'listing agent',
+  'schedule a showing', 'open house hosted by', 'presented by',
+]
+
+function isBlocklisted(title: string, desc: string): boolean {
+  const text = `${title} ${desc}`.toLowerCase()
+  return BLOCKLIST.some(term => text.includes(term))
+}
+
 function classifyUrgency(title: string, desc: string, source: string, taxStatus?: string): 'critical' | 'high' | 'normal' | 'low' {
   const text = `${title} ${desc}`.toLowerCase()
   if (taxStatus === 'delinquent') return 'critical'
@@ -106,6 +121,9 @@ export async function POST(req: NextRequest) {
       const dedupeKey = lead.source_id || `${lead.name}_${lead.address}`
       if (seen.has(dedupeKey)) { skipped++; continue }
       seen.add(dedupeKey)
+
+      // Blocklist — skip broker/investor/wholesaler posts
+      if (isBlocklisted(lead.title || lead.name || '', lead.description || '')) { skipped++; continue }
 
       const now = new Date().toISOString()
       // Only columns that exist in the pipeline table

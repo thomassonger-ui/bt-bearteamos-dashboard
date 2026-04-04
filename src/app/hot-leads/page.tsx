@@ -260,13 +260,12 @@ export default function HotLeadsPage() {
         {/* ═══ RIGHT: Sources & Schedule ═══ */}
         <div style={{ position: 'sticky', top: 24 }}>
           <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '16px', marginBottom: 12 }}>
-            <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10 }}>Scraper Schedule</div>
+            <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10 }}>Schedule</div>
             {[
               { label: 'Craigslist', schedule: 'Daily 7AM ET', active: true },
               { label: 'Google Maps', schedule: 'Weekly Mon 6AM ET', active: true },
               { label: 'Facebook Marketplace', schedule: 'Mon/Wed/Fri 6AM ET', active: true },
-              { label: 'Newspaper', schedule: 'Disabled', active: false },
-              { label: 'County Appraisal', schedule: 'Disabled', active: false },
+              { label: 'Facebook Groups', schedule: 'Tue/Thu 6AM ET', active: true },
             ].map(s => (
               <div key={s.label} style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -292,9 +291,8 @@ export default function HotLeadsPage() {
             {Object.entries({
               craigslist: 'Craigslist',
               google_maps: 'Google Maps',
-              facebook_marketplace: 'Facebook',
-              newspaper: 'Newspaper',
-              county_appraisal: 'County',
+              facebook_marketplace: 'Facebook MP',
+              facebook_groups: 'FB Groups',
             }).map(([key, label]) => {
               const count = leads.filter(l => l.lead_source === key).length
               return (
