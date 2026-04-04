@@ -17,6 +17,10 @@ const URGENCY_COLOR: Record<string, string> = {
 
 const SOURCE_LABEL: Record<string, string> = {
   craigslist: 'Craigslist',
+  zillow_fsbo: 'Zillow FSBO',
+  forsalebyowner: 'ForSaleByOwner.com',
+  fsbo_com: 'FSBO.com',
+  manual_upload: 'Manual Upload',
 }
 
 export default function HotLeadsPage() {
@@ -208,10 +212,13 @@ export default function HotLeadsPage() {
             </div>
             {showUpload && (
               <div style={{ marginTop: 8, marginBottom: 12, padding: '12px', background: 'rgba(25,118,210,0.06)', border: '1px solid rgba(25,118,210,0.2)', borderRadius: 6 }}>
-                <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', lineHeight: 1.6, marginBottom: 8 }}>
-                  Download FSBO listings from Zillow, ForSaleByOwner.com, etc. as CSV. Upload here to add to Hot Leads.<br />
-                  <strong>Required:</strong> <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>address</code> (or title/name)<br />
-                  <strong>Optional:</strong> <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>price</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>city</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>zip</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>phone</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>email</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>url</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>description</code>
+                <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', lineHeight: 1.8, marginBottom: 10 }}>
+                  <strong style={{ color: 'var(--bt-text)', fontSize: 12 }}>How to get FSBO leads from each site:</strong><br /><br />
+                  <strong style={{ color: '#E04E4E' }}>Zillow FSBO:</strong> Go to <a href="https://www.zillow.com/orlando-fl/fsbo/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--bt-accent)' }}>zillow.com/orlando-fl/fsbo</a> &rarr; Scroll through listings &rarr; Copy addresses + prices into a spreadsheet &rarr; Save as .csv &rarr; Upload here<br />
+                  <strong style={{ color: '#1976D2' }}>ForSaleByOwner.com:</strong> Go to <a href="https://www.forsalebyowner.com/search/fl/orlando" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--bt-accent)' }}>forsalebyowner.com/search/fl/orlando</a> &rarr; Copy listing data into spreadsheet &rarr; Save as .csv &rarr; Upload here<br />
+                  <strong style={{ color: '#4CAF50' }}>FSBO.com:</strong> Go to <a href="https://www.fsbo.com/florida/orlando/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--bt-accent)' }}>fsbo.com/florida/orlando</a> &rarr; Copy listing data into spreadsheet &rarr; Save as .csv &rarr; Upload here<br />
+                  <strong style={{ color: '#FF9800' }}>Craigslist:</strong> Auto-scraped daily at 7AM ET &mdash; no action needed<br /><br />
+                  <strong>CSV columns:</strong> <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>address</code> (required), <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>price</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>city</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>zip</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>phone</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>email</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>url</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>description</code>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <label style={{ fontSize: 11, padding: '6px 14px', fontWeight: 600, background: '#1976D2', color: '#fff', borderRadius: 4, cursor: 'pointer' }}>
@@ -362,7 +369,10 @@ export default function HotLeadsPage() {
           <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '16px', marginBottom: 12 }}>
             <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10 }}>Schedule</div>
             {[
-              { label: 'Craigslist', schedule: 'Daily 7AM ET', active: true },
+              { label: 'Craigslist', schedule: 'Daily 7AM ET (auto)', active: true },
+              { label: 'Zillow FSBO', schedule: 'Manual CSV upload', active: true },
+              { label: 'ForSaleByOwner', schedule: 'Manual CSV upload', active: true },
+              { label: 'FSBO.com', schedule: 'Manual CSV upload', active: true },
             ].map(s => (
               <div key={s.label} style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -387,6 +397,10 @@ export default function HotLeadsPage() {
             <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10 }}>Leads by Source</div>
             {Object.entries({
               craigslist: 'Craigslist',
+              zillow_fsbo: 'Zillow FSBO',
+              forsalebyowner: 'ForSaleByOwner',
+              fsbo_com: 'FSBO.com',
+              manual_upload: 'Manual',
             }).map(([key, label]) => {
               const count = leads.filter(l => l.lead_source === key).length
               return (
