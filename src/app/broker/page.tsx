@@ -6,11 +6,13 @@ import PerformanceSummary from '@/components/broker/PerformanceSummary'
 import RiskAlertsPanel from '@/components/broker/RiskAlertsPanel'
 import AgentTable from '@/components/broker/AgentTable'
 import AgentDetailPanel from '@/components/broker/AgentDetailPanel'
+import CommissionSummary from '@/components/broker/CommissionSummary'
 import {
   getAllAgents,
   getAllTasks,
   getAllCompliance,
   getAllPipeline,
+  getAllClosedDeals,
   getActivityLog,
 } from '@/lib/queries'
 import { rankLeads, generateAlerts } from '@/lib/intelligence'
@@ -24,7 +26,9 @@ export default function BrokerPage() {
   const [pipeline, setPipeline] = useState<Pipeline[]>([])
   const [rankedLeads, setRankedLeads] = useState<RankedLead[]>([])
   const [alerts, setAlerts] = useState<LeadAlert[]>([])
+  const [closedDeals, setClosedDeals] = useState<Pipeline[]>([])
   const [loading, setLoading] = useState(true)
+  const [brokerTab, setBrokerTab] = useState<'agents' | 'commissions'>('agents')
 
   // Detail panel state
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
@@ -34,16 +38,18 @@ export default function BrokerPage() {
   const [agentCompliance, setAgentCompliance] = useState<ComplianceRecord[]>([])
 
   const loadAll = useCallback(async () => {
-    const [a, t, c, p] = await Promise.all([
+    const [a, t, c, p, cd] = await Promise.all([
       getAllAgents(),
       getAllTasks(),
       getAllCompliance(),
       getAllPipeline(),
+      getAllClosedDeals(),
     ])
     setAgents(a)
     setTasks(t)
     setCompliance(c)
     setPipeline(p)
+    setClosedDeals(cd)
     setRankedLeads(rankLeads(p))
     setAlerts(generateAlerts(p))
     setLoading(false)
@@ -111,9 +117,30 @@ export default function BrokerPage() {
         </div>
       </div>
 
+      {/* Tab bar */}
+      <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--bt-border)', background: 'var(--bt-surface)', padding: '0 24px', flexShrink: 0 }}>
+        {(['agents', 'commissions'] as const).map(tab => (
+          <button key={tab} onClick={() => setBrokerTab(tab)} style={{
+            padding: '10px 20px', fontSize: 11, fontWeight: brokerTab === tab ? 700 : 400,
+            color: brokerTab === tab ? 'var(--bt-accent)' : 'var(--bt-text-dim)',
+            background: 'transparent', border: 'none', cursor: 'pointer',
+            borderBottom: brokerTab === tab ? '2px solid var(--bt-accent)' : '2px solid transparent',
+            textTransform: 'uppercase', letterSpacing: '0.06em',
+          }}>{tab === 'agents' ? 'Agents & Performance' : 'Commissions & Revenue'}</button>
+        ))}
+      </div>
+
       {/* Main content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '24px 28px' }}>
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
+
+      {brokerTab === 'commissions' ? (
+        <CommissionSummary agents={agents} allDeals={closedDeals} />
+      ) : (
+        <></>
+      )}
+
+      {brokerTab === 'agents' && (<>
 
         {/* Scout Lead Intelligence Alerts */}
         {alerts.length > 0 && (
@@ -194,6 +221,7 @@ export default function BrokerPage() {
             Select an agent to view details and take action.
           </div>
         )}
+      </>)}
       </div>
       </div>
     </div>

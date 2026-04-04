@@ -10,6 +10,7 @@ const NAV: { label: string; href: string; badge?: string }[] = [
   { label: 'Tasks', href: '/tasks' },
   { label: 'Hot Leads', href: '/hot-leads', badge: 'HOT' },
   { label: 'Pipeline', href: '/pipeline' },
+  { label: 'Commissions', href: '/commissions' },
   { label: 'CRM', href: '/crm' },
   { label: 'Memory', href: '/memory' },
   { label: 'Compliance', href: '/compliance' },

@@ -63,6 +63,11 @@ export interface Pipeline {
   last_engagement_update?: string
   brokerage?: string
   enrichment_status?: 'complete' | 'failed' | 'pending' | null
+  // Commission fields
+  closed_date?: string
+  sale_price?: number
+  commission_rate?: number
+  gci?: number
   // Hot lead fields
   lead_source?: LeadSource
   hot_lead_type?: HotLeadType

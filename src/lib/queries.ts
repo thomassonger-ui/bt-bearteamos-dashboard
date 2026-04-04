@@ -345,6 +345,29 @@ export async function resetMissedTasks(agentId: string): Promise<void> {
   if (error) console.error('resetMissedTasks:', error.message)
 }
 
+// ─── COMMISSIONS ─────────────────────────────────────────────────────────────
+
+export async function getClosedDeals(agentId: string): Promise<Pipeline[]> {
+  const { data, error } = await getSupabase()
+    .from('pipeline')
+    .select('*')
+    .eq('agent_id', agentId)
+    .eq('stage', 'closed')
+    .order('closed_date', { ascending: true })
+  if (error) { console.error('getClosedDeals:', error.message); return [] }
+  return (data ?? []) as Pipeline[]
+}
+
+export async function getAllClosedDeals(): Promise<Pipeline[]> {
+  const { data, error } = await getSupabase()
+    .from('pipeline')
+    .select('*')
+    .eq('stage', 'closed')
+    .order('closed_date', { ascending: true })
+  if (error) { console.error('getAllClosedDeals:', error.message); return [] }
+  return (data ?? []) as Pipeline[]
+}
+
 // ─── HOT LEADS ───────────────────────────────────────────────────────────────
 
 export async function getHotLeads(filters?: {
