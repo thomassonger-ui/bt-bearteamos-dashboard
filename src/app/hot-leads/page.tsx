@@ -66,33 +66,79 @@ export default function HotLeadsPage() {
       if (lines.length < 2) { setUploadResult('CSV is empty.'); setUploading(false); return }
       const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''))
 
+      // Smart detection — find data by pattern, not header names
+      function findInRow(vals: string[], test: (v: string) => boolean): string {
+        for (const v of vals) { if (v && test(v.trim())) return v.trim() }
+        return ''
+      }
+
       let added = 0
       let skipped = 0
+      let detectedSource = 'manual_upload'
+
       for (let i = 1; i < lines.length; i++) {
         const vals = parseCSVLine(lines[i])
+        if (vals.every(v => !v.trim())) continue // skip empty rows
+
+        // Try named columns first
         const get = (keys: string[]) => { for (const k of keys) { const idx = headers.indexOf(k); if (idx >= 0 && vals[idx]) return vals[idx].trim() } return '' }
 
-        const title = get(['address', 'title', 'name', 'lead_name', 'property', 'street'])
+        // Smart detect: address = contains street number + name pattern
+        let title = get(['address', 'title', 'name', 'lead_name', 'property', 'street'])
+        if (!title) title = findInRow(vals, v => /^\d+\s+[A-Za-z]/.test(v) && !v.startsWith('http') && !v.startsWith('$') && v.length > 10 && v.length < 80)
+
+        // Smart detect: full address with city/state (e.g. "123 Main St, Orlando, FL 32801")
+        let fullAddr = findInRow(vals, v => /\d+.*,\s*(Orlando|FL|Florida)/i.test(v))
+        if (!title && fullAddr) title = fullAddr.split(',')[0].trim()
+
         if (!title) { skipped++; continue }
 
-        const priceStr = get(['price', 'sale_price', 'asking_price', 'list_price'])
+        // Smart detect: price = starts with $ or is a number > 20000
+        let priceStr = get(['price', 'sale_price', 'asking_price', 'list_price'])
+        if (!priceStr) priceStr = findInRow(vals, v => /^\$[\d,]+$/.test(v))
         const price = priceStr ? parseFloat(priceStr.replace(/[$,]/g, '')) : undefined
+        if (price && price < 20000) { skipped++; continue } // skip rentals
+
+        // Smart detect: URL = starts with http
+        let url = get(['url', 'link', 'listing_url', 'c11n href', 'block href'])
+        if (!url) url = findInRow(vals, v => v.startsWith('http'))
+
+        // Detect source from URL
+        if (url.includes('zillow.com')) detectedSource = 'zillow_fsbo'
+        else if (url.includes('forsalebyowner.com')) detectedSource = 'forsalebyowner'
+        else if (url.includes('fsbo.com')) detectedSource = 'fsbo_com'
+
+        // Smart detect: location with FL
+        let location = get(['location', 'city', 'neighborhood', 'area'])
+        if (!location && fullAddr) location = fullAddr
+        if (!location) location = findInRow(vals, v => /Orlando|FL|\d{5}/.test(v) && !v.startsWith('http') && !v.startsWith('$'))
+
+        // Smart detect: zip
+        let zip = get(['zip', 'zipcode', 'zip_code', 'postal'])
+        if (!zip) { const zipMatch = (fullAddr || location || '').match(/\b(3\d{4})\b/); if (zipMatch) zip = zipMatch[1] }
+
+        // Smart detect: beds/baths from any column
+        const allText = vals.join(' ')
+        const bedsMatch = allText.match(/(\d+)\s*(bed|bd|br)/i)
+        const bathsMatch = allText.match(/([\d.]+)\s*(bath|ba)/i)
+        const sqftMatch = allText.match(/([\d,]+)\s*sq\s*ft/i)
+        const desc = [bedsMatch ? `${bedsMatch[1]} bed` : '', bathsMatch ? `${bathsMatch[1]} bath` : '', sqftMatch ? `${sqftMatch[1]} sqft` : ''].filter(Boolean).join(', ')
 
         const { error } = await getSupabase().from('pipeline').insert({
           agent_id: 'a0000000-0000-0000-0000-000000000001',
           lead_name: title.slice(0, 100),
           stage: 'new_lead',
           last_contact: new Date().toISOString(),
-          lead_source: get(['source']) || 'manual_upload',
+          lead_source: detectedSource,
           urgency: 'normal',
           arv: price && !isNaN(price) ? price : null,
-          property_address: get(['location', 'city', 'neighborhood', 'area']) || null,
-          zip_code: get(['zip', 'zipcode', 'zip_code', 'postal']) || null,
+          property_address: location || null,
+          zip_code: zip || null,
           phone: get(['phone', 'contact', 'seller_phone']) || null,
           email: get(['email', 'seller_email', 'contact_email']) || null,
-          notes: get(['description', 'notes', 'details', 'beds', 'baths']) || null,
-          source_url: get(['url', 'link', 'listing_url']) || null,
-          source_id: get(['url', 'id', 'listing_id']) || `upload_${Date.now()}_${i}`,
+          notes: desc || null,
+          source_url: url || null,
+          source_id: url || `upload_${Date.now()}_${i}`,
           scraped_at: new Date().toISOString(),
           is_hot_lead: true,
         })
