@@ -7,6 +7,8 @@ interface Props {
   urgencyColor: string
   sourceLabel: string
   onRefresh: () => void
+  onAccept?: (leadId: string) => void
+  canAccept?: boolean
 }
 
 function timeAgo(iso: string): string {
@@ -24,7 +26,7 @@ function formatCurrency(n?: number): string {
   return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 })
 }
 
-export default function HotLeadCard({ lead, urgencyColor, sourceLabel }: Props) {
+export default function HotLeadCard({ lead, urgencyColor, sourceLabel, onAccept, canAccept = true }: Props) {
   const typeLabel = lead.hot_lead_type?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 
   return (
@@ -119,12 +121,21 @@ export default function HotLeadCard({ lead, urgencyColor, sourceLabel }: Props) 
             View Source
           </a>
         )}
-        {lead.stage === 'new_lead' && (
-          <span style={{
-            fontSize: 10, padding: '3px 8px', border: '1px solid var(--bt-accent)',
-            borderRadius: 3, color: 'var(--bt-accent)', cursor: 'pointer',
-          }}>
-            Assign Agent
+        {onAccept && canAccept && (
+          <button
+            onClick={() => onAccept(lead.id)}
+            style={{
+              fontSize: 10, fontWeight: 600, padding: '4px 12px',
+              background: '#4CAF50', color: '#fff', border: 'none',
+              borderRadius: 3, cursor: 'pointer',
+            }}
+          >
+            Accept Lead
+          </button>
+        )}
+        {onAccept && !canAccept && (
+          <span style={{ fontSize: 10, padding: '4px 8px', color: 'var(--bt-muted)' }}>
+            Daily limit reached
           </span>
         )}
       </div>

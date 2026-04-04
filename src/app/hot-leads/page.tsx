@@ -30,6 +30,38 @@ export default function HotLeadsPage() {
   const [filterUrgency, setFilterUrgency] = useState<string>('')
   const [filterType, setFilterType] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  const [acceptedToday, setAcceptedToday] = useState(0)
+  const MAX_DAILY = 10
+
+  // Count how many leads this agent accepted today
+  useEffect(() => {
+    const storedDate = sessionStorage.getItem('bt_accept_date')
+    const storedCount = sessionStorage.getItem('bt_accept_count')
+    const today = new Date().toDateString()
+    if (storedDate === today && storedCount) {
+      setAcceptedToday(parseInt(storedCount))
+    } else {
+      sessionStorage.setItem('bt_accept_date', today)
+      sessionStorage.setItem('bt_accept_count', '0')
+      setAcceptedToday(0)
+    }
+  }, [])
+
+  async function acceptLead(leadId: string) {
+    if (acceptedToday >= MAX_DAILY) return
+    const agentId = sessionStorage.getItem('bt_agent_id')
+    if (!agentId) return
+    // Move lead to agent's pipeline
+    await getSupabase()
+      .from('pipeline')
+      .update({ agent_id: agentId, stage: 'new_lead', is_hot_lead: false })
+      .eq('id', leadId)
+    const newCount = acceptedToday + 1
+    setAcceptedToday(newCount)
+    sessionStorage.setItem('bt_accept_count', newCount.toString())
+    sessionStorage.setItem('bt_accept_date', new Date().toDateString())
+    fetchLeads()
+  }
 
   const fetchLeads = useCallback(async () => {
     let query = getSupabase()
@@ -79,9 +111,38 @@ export default function HotLeadsPage() {
 
   return (
     <ResponsiveShell>
-      <main style={{ flex: 1, padding: '24px 32px', overflowY: 'auto' }}>
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        {/* Disclaimer banner — fixed at top */}
+        <div style={{
+          padding: '8px 32px', background: 'rgba(224,82,82,0.08)',
+          borderBottom: '1px solid rgba(224,82,82,0.2)',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0,
+        }}>
+          <span style={{ fontSize: 11, color: '#E04E4E', fontWeight: 600 }}>
+            Only {MAX_DAILY} Leads Per Day &middot; Leads refresh every 24 hours
+          </span>
+          <span style={{ fontSize: 11, color: 'var(--bt-text-dim)' }}>
+            {acceptedToday}/{MAX_DAILY} accepted today
+          </span>
+        </div>
+
+        {acceptedToday >= MAX_DAILY ? (
+          <div style={{
+            flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            flexDirection: 'column', gap: 12, padding: 40,
+          }}>
+            <div style={{ fontSize: 40 }}>&#128274;</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--bt-text)' }}>Daily Limit Reached</div>
+            <div style={{ fontSize: 13, color: 'var(--bt-text-dim)', textAlign: 'center', maxWidth: 400 }}>
+              You have accepted {MAX_DAILY} leads today. New leads will be available in 24 hours. Leads refresh automatically — no passcode needed.
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--bt-muted)', marginTop: 8 }}>
+              {acceptedToday}/{MAX_DAILY} leads accepted today
+            </div>
+          </div>
+        ) : (<>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 32px 24px', minHeight: 0 }}>
         <div className="m-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 24, alignItems: 'start' }}>
-        {/* ═══ LEFT: Existing content ═══ */}
         <div>
         {/* Header */}
         <div style={{ marginBottom: 24 }}>
@@ -89,7 +150,7 @@ export default function HotLeadsPage() {
             Hot Leads
           </h1>
           <p style={{ fontSize: 12, color: 'var(--bt-text-dim)' }}>
-            Automated lead pipeline from Apify scrapers via n8n
+            Automated lead pipeline from Apify scrapers
           </p>
         </div>
 
@@ -183,6 +244,8 @@ export default function HotLeadsPage() {
                 urgencyColor={URGENCY_COLOR[lead.urgency ?? 'normal']}
                 sourceLabel={SOURCE_LABEL[lead.lead_source ?? ''] ?? lead.lead_source ?? ''}
                 onRefresh={fetchLeads}
+                onAccept={acceptLead}
+                canAccept={acceptedToday < MAX_DAILY}
               />
             ))}
           </div>
@@ -249,6 +312,8 @@ export default function HotLeadsPage() {
         </div>{/* end RIGHT */}
 
         </div>{/* end grid */}
+        </div>
+        </>)}
       </main>
     </ResponsiveShell>
   )
