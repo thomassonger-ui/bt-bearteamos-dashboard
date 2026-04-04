@@ -166,7 +166,7 @@ export default function Sidebar() {
             background: 'transparent', border: 'none', cursor: 'pointer',
           }}
         >
-          Daily Toolkit
+          Daily Toolkit {showLinks ? '\u25B2' : '\u25BC'}
         </button>
 
         {showLinks && (
