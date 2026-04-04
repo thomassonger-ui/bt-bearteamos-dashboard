@@ -3,6 +3,14 @@
 import type { Agent, Pipeline } from '@/types'
 
 // ─── Contract Terms ──────────────────────────────────────────────────────────
+// Pre-contract payments (before ICA effective date April 1, 2026)
+const PRE_CONTRACT_PAYMENTS: { month: number; year: number; label: string; amount: number; type: string }[] = [
+  { month: 1, year: 2026, label: 'Feb', amount: 1500, type: 'Academy (pre-contract)' },
+  { month: 2, year: 2026, label: 'Mar', amount: 1500, type: 'Academy (pre-contract)' },
+  { month: 3, year: 2026, label: 'Apr', amount: 1500, type: 'Academy' },
+  { month: 3, year: 2026, label: 'Apr', amount: 2000, type: 'Stipend' },
+]
+
 const BASE_PHASES = [
   { label: 'Phase 1', start: '2026-04-01', end: '2026-08-31', monthly: 3500, rationale: 'Ramp / systems build-out' },
   { label: 'Phase 2', start: '2026-09-01', end: '2026-12-31', monthly: 2500, rationale: 'Stabilization / pipeline growth' },
@@ -58,11 +66,20 @@ export default function RecruiterPerformance({ agents, allDeals }: Props) {
     const monthGCI = monthDeals.reduce((sum, d) => sum + (d.gci ?? (d.sale_price ?? 0) * (d.commission_rate ?? 0.025)), 0)
     const override = monthGCI * overrideRate
 
-    // Base compensation for this month
+    // Pre-contract payments for this month
+    const preContractPayments = PRE_CONTRACT_PAYMENTS.filter(p => p.month === monthIdx && p.year === currentYear)
+    const preContractTotal = preContractPayments.reduce((s, p) => s + p.amount, 0)
+    const preContractLabel = preContractPayments.map(p => `${p.type}: $${p.amount.toLocaleString()}`).join(' + ')
+
+    // Base compensation for this month (contract base starts April)
     const monthDate = new Date(currentYear, monthIdx, 15)
     const phase = getPhase(monthDate)
     const isPast = monthIdx <= currentMonth
-    const base = isPast ? phase.monthly : 0
+    const contractStarted = monthIdx >= 3 // April = month 3
+    const base = isPast && contractStarted ? phase.monthly : 0
+
+    // Actual paid = pre-contract payments OR contract base (not both for same month)
+    const actualPaid = preContractTotal > 0 ? preContractTotal : base
 
     // Bonus check — cumulative deals up to this month
     const cumulativeDealsToMonth = eligibleDeals.filter(d => {
@@ -73,7 +90,6 @@ export default function RecruiterPerformance({ agents, allDeals }: Props) {
 
     let bonusThisMonth = 0
     for (const b of BONUSES) {
-      // Check if this milestone was crossed in THIS month
       const cumulativePrevMonth = eligibleDeals.filter(d => {
         const closeDate = d.closed_date ? new Date(d.closed_date) : new Date(d.created_at)
         return closeDate.getFullYear() < currentYear ||
@@ -86,9 +102,9 @@ export default function RecruiterPerformance({ agents, allDeals }: Props) {
 
     return {
       label, monthIdx, deals: monthDeals.length, gci: monthGCI,
-      override, base, bonus: bonusThisMonth,
-      total: base + override + bonusThisMonth,
-      isPast,
+      override, base: actualPaid, bonus: bonusThisMonth,
+      total: actualPaid + override + bonusThisMonth,
+      isPast, preContractLabel,
     }
   })
 
@@ -249,7 +265,7 @@ export default function RecruiterPerformance({ agents, allDeals }: Props) {
                 </td>
                 <td style={{ padding: '8px 6px', textAlign: 'right' }}>{m.deals || '\u2014'}</td>
                 <td style={{ padding: '8px 6px', textAlign: 'right' }}>{m.gci > 0 ? `$${Math.round(m.gci).toLocaleString()}` : '\u2014'}</td>
-                <td style={{ padding: '8px 6px', textAlign: 'right' }}>{m.base > 0 ? `$${m.base.toLocaleString()}` : '\u2014'}</td>
+                <td style={{ padding: '8px 6px', textAlign: 'right' }} title={m.preContractLabel || ''}>{m.base > 0 ? `$${m.base.toLocaleString()}` : '\u2014'}</td>
                 <td style={{ padding: '8px 6px', textAlign: 'right', color: '#FF9800' }}>{m.override > 0 ? `$${Math.round(m.override).toLocaleString()}` : '\u2014'}</td>
                 <td style={{ padding: '8px 6px', textAlign: 'right', color: '#a084e8' }}>{m.bonus > 0 ? `$${m.bonus.toLocaleString()}` : '\u2014'}</td>
                 <td style={{ padding: '8px 6px', textAlign: 'right', fontWeight: 600, color: '#4CAF50' }}>{m.total > 0 ? `$${Math.round(m.total).toLocaleString()}` : '\u2014'}</td>
