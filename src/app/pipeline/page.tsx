@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Sidebar from '@/components/Sidebar'
+import MobileLayout from '@/components/MobileLayout'
+import MobilePipeline from '@/components/MobilePipeline'
 import PipelineBoard from '@/components/PipelineBoard'
 import ActivityChart from '@/components/ActivityChart'
 import CoachPanel from '@/components/CoachPanel'
@@ -17,6 +19,14 @@ export default function PipelinePage() {
   const [metrics, setMetrics] = useState<WeeklyMetrics | null>(null)
   const [logCallLoading, setLogCallLoading] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Pipeline | null>(null)
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    function check() { setIsMobile(window.innerWidth < 768) }
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
 
   // Store selected lead for AI Writer
   useEffect(() => {
@@ -156,6 +166,14 @@ export default function PipelinePage() {
     .sort((a, b) => new Date(a.last_contact).getTime() - new Date(b.last_contact).getTime())[0]
 
   if (loading) return <div style={{ padding: 40, color: 'var(--bt-text-dim)' }}>Loading\u2026</div>
+
+  if (isMobile) {
+    return (
+      <MobileLayout>
+        <MobilePipeline pipeline={pipeline} onContact={handleContact} />
+      </MobileLayout>
+    )
+  }
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>

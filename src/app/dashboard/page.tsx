@@ -2,11 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import Sidebar from '@/components/Sidebar'
+import MobileLayout from '@/components/MobileLayout'
+import MobileDashboard from '@/components/MobileDashboard'
 import DailySummaryCard from '@/components/DailySummaryCard'
 import TaskList from '@/components/TaskList'
-import { getAgent, getFirstAgent, getTasks, getCompliance, updateTaskStatus, logActivity } from '@/lib/queries'
+import { getAgent, getFirstAgent, getTasks, getCompliance, getPipeline, updateTaskStatus, logActivity } from '@/lib/queries'
+import { getWeeklyMetrics } from '@/lib/metrics'
+import type { WeeklyMetrics } from '@/lib/metrics'
 import { runEngine } from '@/lib/engine'
-import type { Agent, Task, ComplianceRecord } from '@/types'
+import type { Agent, Task, Pipeline, ComplianceRecord } from '@/types'
 
 // Market data feed content
 const MARKET_CARDS = [
@@ -112,9 +116,19 @@ export default function DashboardPage() {
   const [agent, setAgent] = useState<Agent | null>(null)
   const [tasks, setTasks] = useState<Task[]>([])
   const [compliance, setCompliance] = useState<ComplianceRecord[]>([])
+  const [pipeline, setPipelineData] = useState<Pipeline[]>([])
+  const [metrics, setMetrics] = useState<WeeklyMetrics | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isMobile, setIsMobile] = useState(false)
   const [marketIdx, setMarketIdx] = useState(0)
   const [trainingIdx, setTrainingIdx] = useState(0)
+
+  useEffect(() => {
+    function check() { setIsMobile(window.innerWidth < 768) }
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
 
   // Auto-rotate feeds every 10 seconds
   useEffect(() => {
@@ -137,13 +151,17 @@ export default function DashboardPage() {
       const agentData = storedId ? await getAgent(storedId) : await getFirstAgent()
       if (!agentData) { setLoading(false); return }
       await runEngine(agentData.id)
-      const [freshTasks, freshCompliance] = await Promise.all([
+      const [freshTasks, freshCompliance, pipelineData, metricsData] = await Promise.all([
         getTasks(agentData.id),
         getCompliance(agentData.id),
+        getPipeline(agentData.id),
+        getWeeklyMetrics(agentData.id),
       ])
       setAgent(agentData)
       setTasks(freshTasks)
       setCompliance(freshCompliance)
+      setPipelineData(pipelineData)
+      setMetrics(metricsData)
       setLoading(false)
     }
     init()
@@ -172,6 +190,14 @@ export default function DashboardPage() {
       No agent found. <a href="/login" style={{ color: 'var(--bt-accent)', marginLeft: 8 }}>Login</a>
     </div>
   )
+
+  if (isMobile) {
+    return (
+      <MobileLayout>
+        <MobileDashboard agent={agent} tasks={tasks} pipeline={pipeline} metrics={metrics} />
+      </MobileLayout>
+    )
+  }
 
   const now = new Date()
   const dayName = now.toLocaleDateString('en-US', { weekday: 'long' })
