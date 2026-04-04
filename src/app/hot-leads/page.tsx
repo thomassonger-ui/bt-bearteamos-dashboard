@@ -91,6 +91,23 @@ export default function HotLeadsPage() {
         let fullAddr = findInRow(vals, v => /\d+.*,\s*(Orlando|FL|Florida)/i.test(v))
         if (!title && fullAddr) title = fullAddr.split(',')[0].trim()
 
+        // Smart detect: address from URL path (fsbo.com format: /search/123-main-st-orlando-fl-32819)
+        if (!title) {
+          const urlVal = findInRow(vals, v => v.startsWith('http'))
+          if (urlVal) {
+            const pathMatch = urlVal.match(/\/(\d+-[a-z0-9-]+-(?:orlando|fl|kissimmee|sanford|winter-park|lake-mary|altamonte)[a-z0-9-]*)/i)
+            if (pathMatch) {
+              title = pathMatch[1]
+                .replace(/-(\d{5}).*$/, ', FL $1')
+                .replace(/-fl-/, ', FL ')
+                .replace(/-orlando-/, ', Orlando, ')
+                .replace(/-/g, ' ')
+                .replace(/\b\w/g, c => c.toUpperCase())
+                .trim()
+            }
+          }
+        }
+
         if (!title) { skipped++; continue }
 
         // Smart detect: price = starts with $ or is a number > 20000
