@@ -7,14 +7,18 @@ import RiskAlertsPanel from '@/components/broker/RiskAlertsPanel'
 import AgentTable from '@/components/broker/AgentTable'
 import AgentDetailPanel from '@/components/broker/AgentDetailPanel'
 import CommissionSummary from '@/components/broker/CommissionSummary'
+import RecruitPipeline from '@/components/broker/RecruitPipeline'
 import {
   getAllAgents,
   getAllTasks,
   getAllCompliance,
   getAllPipeline,
   getAllClosedDeals,
+  getRecruitLeads,
+  updateRecruitStage,
   getActivityLog,
 } from '@/lib/queries'
+import type { RecruitLead } from '@/types'
 import { rankLeads, generateAlerts } from '@/lib/intelligence'
 import type { RankedLead, LeadAlert } from '@/lib/intelligence'
 import type { Agent, Task, ComplianceRecord, Pipeline, ActivityLog } from '@/types'
@@ -27,8 +31,11 @@ export default function BrokerPage() {
   const [rankedLeads, setRankedLeads] = useState<RankedLead[]>([])
   const [alerts, setAlerts] = useState<LeadAlert[]>([])
   const [closedDeals, setClosedDeals] = useState<Pipeline[]>([])
+  const [recruitLeads, setRecruitLeads] = useState<RecruitLead[]>([])
   const [loading, setLoading] = useState(true)
-  const [brokerTab, setBrokerTab] = useState<'agents' | 'commissions'>('agents')
+  const [brokerTab, setBrokerTab] = useState<'agents' | 'commissions' | 'recruiting'>('agents')
+  const [convertingId, setConvertingId] = useState<string | null>(null)
+  const [convertResult, setConvertResult] = useState<string | null>(null)
 
   // Detail panel state
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
@@ -38,18 +45,20 @@ export default function BrokerPage() {
   const [agentCompliance, setAgentCompliance] = useState<ComplianceRecord[]>([])
 
   const loadAll = useCallback(async () => {
-    const [a, t, c, p, cd] = await Promise.all([
+    const [a, t, c, p, cd, rl] = await Promise.all([
       getAllAgents(),
       getAllTasks(),
       getAllCompliance(),
       getAllPipeline(),
       getAllClosedDeals(),
+      getRecruitLeads(),
     ])
     setAgents(a)
     setTasks(t)
     setCompliance(c)
     setPipeline(p)
     setClosedDeals(cd)
+    setRecruitLeads(rl)
     setRankedLeads(rankLeads(p))
     setAlerts(generateAlerts(p))
     setLoading(false)
@@ -119,14 +128,18 @@ export default function BrokerPage() {
 
       {/* Tab bar */}
       <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--bt-border)', background: 'var(--bt-surface)', padding: '0 24px', flexShrink: 0 }}>
-        {(['agents', 'commissions'] as const).map(tab => (
-          <button key={tab} onClick={() => setBrokerTab(tab)} style={{
-            padding: '10px 20px', fontSize: 11, fontWeight: brokerTab === tab ? 700 : 400,
-            color: brokerTab === tab ? 'var(--bt-accent)' : 'var(--bt-text-dim)',
+        {([
+          { key: 'agents' as const, label: 'Agents & Performance' },
+          { key: 'commissions' as const, label: 'Commissions & Revenue' },
+          { key: 'recruiting' as const, label: 'Recruiting' },
+        ]).map(tab => (
+          <button key={tab.key} onClick={() => setBrokerTab(tab.key)} style={{
+            padding: '10px 20px', fontSize: 11, fontWeight: brokerTab === tab.key ? 700 : 400,
+            color: brokerTab === tab.key ? 'var(--bt-accent)' : 'var(--bt-text-dim)',
             background: 'transparent', border: 'none', cursor: 'pointer',
-            borderBottom: brokerTab === tab ? '2px solid var(--bt-accent)' : '2px solid transparent',
+            borderBottom: brokerTab === tab.key ? '2px solid var(--bt-accent)' : '2px solid transparent',
             textTransform: 'uppercase', letterSpacing: '0.06em',
-          }}>{tab === 'agents' ? 'Agents & Performance' : 'Commissions & Revenue'}</button>
+          }}>{tab.label}</button>
         ))}
       </div>
 
@@ -136,6 +149,50 @@ export default function BrokerPage() {
 
       {brokerTab === 'commissions' ? (
         <CommissionSummary agents={agents} allDeals={closedDeals} />
+      ) : brokerTab === 'recruiting' ? (
+        <div>
+          {convertResult && (
+            <div style={{ marginBottom: 12, padding: '10px 14px', background: 'rgba(76,175,80,0.1)', border: '1px solid rgba(76,175,80,0.3)', borderRadius: 4, fontSize: 12, color: '#4CAF50' }}>
+              {convertResult}
+            </div>
+          )}
+          <RecruitPipeline
+            leads={recruitLeads}
+            onStageChange={async (leadId, stage) => {
+              await updateRecruitStage(leadId, stage)
+              setRecruitLeads(await getRecruitLeads())
+            }}
+            onConvert={async (leadId) => {
+              setConvertingId(leadId)
+              setConvertResult(null)
+              try {
+                const res = await fetch('/api/onboard-agent', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ leadId, role: 'Buyer Agent' }),
+                })
+                const data = await res.json()
+                if (res.ok) {
+                  setConvertResult(`Agent created: ${data.agent.name} (username: ${data.credentials.username}, password: ${data.credentials.password}). Welcome email sent.`)
+                  setRecruitLeads(await getRecruitLeads())
+                  await loadAll()
+                } else {
+                  setConvertResult(`Error: ${data.error}`)
+                }
+              } catch { setConvertResult('Error converting recruit.') }
+              finally { setConvertingId(null) }
+            }}
+            onDraftOutreach={(lead) => {
+              // Store lead info for AI Writer
+              sessionStorage.setItem('bt_selected_lead', JSON.stringify({
+                name: lead.name,
+                email: lead.email || '',
+              }))
+              // Open AI Writer by clicking the sidebar button - or just alert
+              alert(`Draft outreach for ${lead.name}:\n\nOpen AI Writer from the sidebar and use this prompt:\n\n"Write a recruiting outreach email to ${lead.name} who currently works at ${lead.brokerage || 'another brokerage'}${lead.deal_count ? ` and does about ${lead.deal_count} deals per year` : ''}. Highlight Bear Team's $0 monthly fees, progressive cap model, and Orlando market support."`)
+            }}
+          />
+        </div>
       ) : (
         <></>
       )}

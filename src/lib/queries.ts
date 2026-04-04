@@ -1,5 +1,5 @@
 import { getSupabase } from './supabase'
-import type { Agent, Task, ActivityLog, Pipeline, ComplianceRecord, HotLeadSource } from '@/types'
+import type { Agent, Task, ActivityLog, Pipeline, ComplianceRecord, HotLeadSource, RecruitLead } from '@/types'
 
 // ─── AGENT ────────────────────────────────────────────────────────────────────
 
@@ -343,6 +343,55 @@ export async function resetMissedTasks(agentId: string): Promise<void> {
     .eq('agent_id', agentId)
     .eq('status', 'missed')
   if (error) console.error('resetMissedTasks:', error.message)
+}
+
+// ─── RECRUITING ──────────────────────────────────────────────────────────────
+
+export async function getRecruitLeads(): Promise<RecruitLead[]> {
+  const { data, error } = await getSupabase()
+    .from('leads')
+    .select('*')
+    .order('created_at', { ascending: false })
+  if (error) { console.error('getRecruitLeads:', error.message); return [] }
+  return (data ?? []) as RecruitLead[]
+}
+
+export async function updateRecruitStage(leadId: string, stage: string): Promise<void> {
+  const { error } = await getSupabase()
+    .from('leads')
+    .update({ stage, updated_at: new Date().toISOString() })
+    .eq('id', leadId)
+  if (error) console.error('updateRecruitStage:', error.message)
+}
+
+export async function convertRecruitToAgent(lead: RecruitLead, username: string, role: string): Promise<Agent | null> {
+  const { data, error } = await getSupabase()
+    .from('agents')
+    .insert({
+      name: lead.name,
+      email: lead.email,
+      phone: lead.phone || null,
+      username,
+      stage: 'Onboarding',
+      onboarding_stage: 0,
+      last_active: new Date().toISOString(),
+      inactivity_streak: 0,
+      missed_streak: 0,
+      performance_score: 0,
+      start_date: new Date().toISOString(),
+      role,
+    } as any)
+    .select()
+    .single()
+  if (error) { console.error('convertRecruitToAgent:', error.message); return null }
+
+  // Mark lead as converted
+  await getSupabase()
+    .from('leads')
+    .update({ stage: 'closed_won', onboarded_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq('id', lead.id)
+
+  return data as Agent
 }
 
 // ─── COMMISSIONS ─────────────────────────────────────────────────────────────

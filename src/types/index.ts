@@ -137,6 +137,30 @@ export interface ComplianceRecord {
   updated_at: string
 }
 
+export interface RecruitLead {
+  id: string
+  name: string
+  email: string
+  phone?: string
+  source?: string
+  status?: string
+  stage?: string
+  brokerage?: string
+  deal_count?: number
+  avg_price?: number
+  notes?: string
+  entry_type?: string
+  tier?: string
+  call_outcome?: string
+  top_objection?: string
+  follow_up_date?: string
+  calendly_event_uri?: string
+  drip_step?: number
+  onboarded_at?: string
+  created_at: string
+  updated_at?: string
+}
+
 // ─── UI helpers ──────────────────────────────────────────────────────────────
 
 export type TaskStatus = Task['status']
