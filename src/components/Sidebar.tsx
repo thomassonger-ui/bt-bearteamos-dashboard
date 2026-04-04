@@ -55,10 +55,27 @@ const QUICK_LINKS = [
   },
 ]
 
+const COUNTY_TAX_LINKS = [
+  { label: 'Orange County', href: 'https://www.ocpafl.org/Searches/ParcelSearch.aspx' },
+  { label: 'Seminole County', href: 'https://www.scpafl.org/' },
+  { label: 'Osceola County', href: 'https://www.property-appraiser.org/' },
+  { label: 'Lake County', href: 'https://www.lakecopropappr.com/' },
+  { label: 'Volusia County', href: 'https://www.vcpa.vcgov.org/' },
+]
+
+const CROSS_REF_LINKS = [
+  { label: 'Apollo.io', href: 'https://www.apollo.io' },
+  { label: 'Spokeo', href: 'https://www.spokeo.com' },
+  { label: 'BeenVerified', href: 'https://www.beenverified.com' },
+  { label: 'TruePeopleSearch', href: 'https://www.truepeoplesearch.com' },
+]
+
 export default function Sidebar() {
   const path = usePathname()
   const [isAdmin, setIsAdmin] = useState(false)
-  const [showLinks, setShowLinks] = useState(true)
+  const [showLinks, setShowLinks] = useState(false)
+  const [showCounty, setShowCounty] = useState(false)
+  const [showCrossRef, setShowCrossRef] = useState(false)
   const [showAIWriter, setShowAIWriter] = useState(false)
 
   useEffect(() => {
@@ -177,6 +194,60 @@ export default function Sidebar() {
                   </a>
                 ))}
               </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* County Tax Rolls */}
+      <div style={{ flexShrink: 0 }}>
+        <button
+          onClick={() => setShowCounty(v => !v)}
+          style={{
+            width: '100%', textAlign: 'left',
+            padding: '8px 16px',
+            fontSize: 10, fontWeight: 700,
+            letterSpacing: '0.08em', textTransform: 'uppercase',
+            color: 'var(--bt-text-dim)',
+            background: 'transparent', border: 'none', cursor: 'pointer',
+          }}
+        >
+          County Tax Rolls {showCounty ? '\u25B2' : '\u25BC'}
+        </button>
+        {showCounty && (
+          <div style={{ paddingBottom: 8 }}>
+            {COUNTY_TAX_LINKS.map(link => (
+              <a key={link.href} href={link.href} target="_blank" rel="noopener noreferrer"
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 16px', fontSize: 12, color: 'var(--bt-text-dim)', textDecoration: 'none' }}>
+                {link.label}<span style={{ fontSize: 9, opacity: 0.5 }}>&#8599;</span>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Cross References */}
+      <div style={{ flexShrink: 0 }}>
+        <button
+          onClick={() => setShowCrossRef(v => !v)}
+          style={{
+            width: '100%', textAlign: 'left',
+            padding: '8px 16px',
+            fontSize: 10, fontWeight: 700,
+            letterSpacing: '0.08em', textTransform: 'uppercase',
+            color: 'var(--bt-text-dim)',
+            background: 'transparent', border: 'none', cursor: 'pointer',
+          }}
+        >
+          Cross References {showCrossRef ? '\u25B2' : '\u25BC'}
+        </button>
+        {showCrossRef && (
+          <div style={{ paddingBottom: 8 }}>
+            {CROSS_REF_LINKS.map(link => (
+              <a key={link.href} href={link.href} target="_blank" rel="noopener noreferrer"
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 16px', fontSize: 12, color: 'var(--bt-text-dim)', textDecoration: 'none' }}>
+                {link.label}<span style={{ fontSize: 9, opacity: 0.5 }}>&#8599;</span>
+              </a>
             ))}
           </div>
         )}
