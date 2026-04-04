@@ -48,6 +48,13 @@ export default function PipelinePage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
 
+  // Request notification permission on load
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }, [])
+
   useEffect(() => {
     async function load() {
       const storedId = sessionStorage.getItem('bt_agent_id')
@@ -68,6 +75,30 @@ export default function PipelinePage() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatMessages])
+
+  // Poll for new leads every 60s — Speed-to-Lead alerts
+  useEffect(() => {
+    if (!agent) return
+    let lastCount = pipeline.length
+    const interval = setInterval(async () => {
+      const fresh = await getPipeline(agent.id)
+      if (fresh.length > lastCount) {
+        const newLeads = fresh.slice(lastCount)
+        setPipeline(fresh)
+        if ('Notification' in window && Notification.permission === 'granted') {
+          for (const lead of newLeads) {
+            new Notification('New Lead — Call within 5 minutes!', {
+              body: `${lead.lead_name} — ${lead.lead_type?.toUpperCase() || 'Lead'}${lead.phone ? ' \u00B7 ' + lead.phone : ''}`,
+              icon: '/favicon.ico',
+              tag: `speed-to-lead-${lead.id}`,
+            })
+          }
+        }
+      }
+      lastCount = fresh.length
+    }, 60000)
+    return () => clearInterval(interval)
+  }, [agent, pipeline.length])
 
   async function handleEditSave(pipelineId: string, data: Record<string, string>) {
     await updatePipelineLead(pipelineId, data)
@@ -148,7 +179,17 @@ export default function PipelinePage() {
       setChatMessages(prev => [...prev, { role: 'assistant', content: data.reply ?? 'Done.' }])
       // Refresh pipeline if any action was taken
       if (data.action) {
-        setPipeline(await getPipeline(agent.id))
+        const fresh = await getPipeline(agent.id)
+        setPipeline(fresh)
+        // Speed-to-Lead notification for new leads
+        if (data.action.type === 'created' && 'Notification' in window && Notification.permission === 'granted') {
+          const lead = data.action.lead
+          new Notification('New Lead — Call within 5 minutes!', {
+            body: `${lead.lead_name} — ${lead.lead_type?.toUpperCase() || 'Lead'}${lead.phone ? ' · ' + lead.phone : ''}`,
+            icon: '/favicon.ico',
+            tag: 'speed-to-lead',
+          })
+        }
       }
     } catch {
       setChatMessages(prev => [...prev, { role: 'assistant', content: 'Error \u2014 please try again.' }])

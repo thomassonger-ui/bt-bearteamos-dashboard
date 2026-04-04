@@ -130,6 +130,13 @@ export default function DashboardPage() {
     return () => window.removeEventListener('resize', check)
   }, [])
 
+  // Request notification permission
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission()
+    }
+  }, [])
+
   // Auto-rotate feeds every 10 seconds
   useEffect(() => {
     const timer = setInterval(() => {
