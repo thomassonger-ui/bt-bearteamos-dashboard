@@ -50,14 +50,14 @@ export default function TasksPage() {
 
   return (
     <ResponsiveShell>
-      <main style={{ flex: 1, padding: '24px 28px', overflowY: 'auto', height: '100%' }}>
-        <div style={{ maxWidth: 900, margin: '0 auto' }}>
+      <main className="m-pad m-scroll" style={{ flex: 1, padding: '24px 28px', overflowY: 'auto', height: '100%' }}>
+        <div className="m-full" style={{ maxWidth: 900, margin: '0 auto' }}>
           <div style={{ marginBottom: 20 }}>
             <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 4 }}>Task Management</div>
             <div style={{ fontSize: 20, fontWeight: 700 }}>{agent?.name ?? '—'}</div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+          <div className="m-grid2" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
             {[
               { label: 'Pending / Overdue', value: pending.length, color: pending.length > 0 ? 'var(--bt-yellow)' : 'var(--bt-green)' },
               { label: 'Completed', value: completed.length, color: 'var(--bt-green)' },

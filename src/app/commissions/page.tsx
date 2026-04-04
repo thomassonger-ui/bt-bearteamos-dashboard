@@ -90,8 +90,8 @@ export default function CommissionsPage() {
 
   return (
     <ResponsiveShell>
-      <main style={{ flex: 1, overflowY: 'auto', padding: '20px 28px' }}>
-        <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+      <main className="m-pad m-scroll" style={{ flex: 1, overflowY: 'auto', padding: '20px 28px' }}>
+        <div className="m-full" style={{ maxWidth: 1000, margin: '0 auto' }}>
 
           {/* Header */}
           <div style={{ marginBottom: 20 }}>
@@ -100,7 +100,7 @@ export default function CommissionsPage() {
           </div>
 
           {/* Top row: Tier + YTD + Projected */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 20 }}>
+          <div className="m-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 20 }}>
 
             {/* Tier Progress */}
             <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '16px' }}>
@@ -275,7 +275,7 @@ export default function CommissionsPage() {
           {/* Tier Reference */}
           <div style={{ marginTop: 20, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '16px' }}>
             <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10 }}>Progressive Cap Model</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+            <div className="m-grid2" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
               {TIERS.map(t => (
                 <div key={t.label} style={{
                   padding: '10px', borderRadius: 4,

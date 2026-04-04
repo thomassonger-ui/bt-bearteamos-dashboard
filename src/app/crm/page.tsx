@@ -175,11 +175,11 @@ export default function CRMPage() {
 
   return (
     <ResponsiveShell>
-      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <main className="m-scroll" style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
         {/* Header */}
         <div style={{ padding: '16px 24px 12px', borderBottom: '1px solid var(--bt-border)', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div className="m-stack" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8 }}>
             <div>
               <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>Contact Book</div>
               <div style={{ fontSize: 17, fontWeight: 700 }}>{agent?.name ?? '\u2014'}&apos;s CRM</div>
@@ -266,7 +266,7 @@ James Carter,seller,321-555-8834,james@example.com,123 Oak St Orlando,contacted,
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
 
           {/* A-Z sidebar */}
-          <div style={{
+          <div className="m-hide" style={{
             width: 32, flexShrink: 0, borderRight: '1px solid var(--bt-border)',
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             padding: '8px 0', overflowY: 'auto',
@@ -315,7 +315,7 @@ James Carter,seller,321-555-8834,james@example.com,123 Oak St Orlando,contacted,
                   {leads.map(contact => {
                     const d = daysSince(contact.last_contact)
                     return (
-                      <div key={contact.id} style={{
+                      <div key={contact.id} className="m-stack" style={{
                         display: 'grid', gridTemplateColumns: '1fr 120px 140px 100px 90px',
                         gap: 8, alignItems: 'center',
                         padding: '10px 12px', marginBottom: 4,

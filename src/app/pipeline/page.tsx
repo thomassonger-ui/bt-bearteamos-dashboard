@@ -239,7 +239,7 @@ export default function PipelinePage() {
           )}
 
           {/* KPI bar */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6, marginBottom: 4, flexShrink: 0 }}>
+          <div className="m-grid2" style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6, marginBottom: 4, flexShrink: 0 }}>
             {[
               ...(metrics ? [
                 { label: 'Calls', value: metrics.calls_this_week, target: TARGETS.calls, color: paceColor(metrics.call_pace) },
