@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/automation",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/scrape-fsbo",
+      "schedule": "0 11 * * *"
     }
   ]
 }

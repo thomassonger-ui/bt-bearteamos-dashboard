@@ -23,7 +23,7 @@ export default function HotLeadSourcePanel({ sources }: Props) {
     }}>
       <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--bt-border)' }}>
         <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-          Scraper Sources
+          Sources
         </div>
       </div>
 

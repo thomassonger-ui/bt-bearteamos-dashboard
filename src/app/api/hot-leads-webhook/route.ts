@@ -50,6 +50,46 @@ function extractPrice(price?: string | number): number | undefined {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normalizeLead(raw: any, source: string) {
+  // Facebook Marketplace format
+  if (source === 'facebook_marketplace') {
+    const geo = raw.reverse_geocode || raw.location || {}
+    const city = typeof geo === 'object' ? (geo.city || geo.display_name || '') : String(geo)
+    const state = typeof geo === 'object' ? (geo.state || '') : ''
+    return {
+      name: raw.marketplace_listing_title || raw.title || raw.name || 'FB Listing',
+      title: raw.marketplace_listing_title || raw.title || '',
+      description: raw.redacted_description?.text || raw.description || raw.body || '',
+      price: raw.listing_price?.amount || raw.price || raw.formatted_price,
+      address: city ? `${city}${state ? ', ' + state : ''}` : '',
+      zip: typeof geo === 'object' ? (geo.zipcode || '') : '',
+      phone: raw.phone || raw.seller?.phone,
+      email: raw.email || raw.seller?.email,
+      url: raw.url || (raw.id ? `https://www.facebook.com/marketplace/item/${raw.id}` : ''),
+      source_id: raw.id || raw.listing_id || raw.url,
+      assessed_value: undefined,
+      tax_status: undefined,
+    }
+  }
+
+  // Facebook Groups format
+  if (source === 'facebook_groups') {
+    return {
+      name: (raw.text || raw.message || '').slice(0, 80) || 'FB Group Post',
+      title: (raw.text || raw.message || '').slice(0, 80),
+      description: raw.text || raw.message || raw.postText || '',
+      price: undefined,
+      address: '',
+      zip: '',
+      phone: raw.phone,
+      email: raw.email,
+      url: raw.url || raw.postUrl || raw.link,
+      source_id: raw.postId || raw.id || raw.url,
+      assessed_value: undefined,
+      tax_status: undefined,
+    }
+  }
+
+  // Default format (Craigslist, etc.)
   const title = raw.title || raw.name || raw.business_name || raw.ownerName || raw.headline || ''
   const desc = raw.description || raw.body || raw.text || raw.content || ''
   const address = raw.location || raw.address || raw.propertyAddress || raw.neighborhood || raw.street || ''

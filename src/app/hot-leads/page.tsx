@@ -18,9 +18,6 @@ const URGENCY_COLOR: Record<string, string> = {
 const SOURCE_LABEL: Record<string, string> = {
   facebook_marketplace: 'Facebook Marketplace',
   craigslist: 'Craigslist',
-  google_maps: 'Google Maps',
-  county_appraisal: 'County Appraisal',
-  newspaper: 'Newspaper',
 }
 
 export default function HotLeadsPage() {
@@ -263,9 +260,7 @@ export default function HotLeadsPage() {
             <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10 }}>Schedule</div>
             {[
               { label: 'Craigslist', schedule: 'Daily 7AM ET', active: true },
-              { label: 'Google Maps', schedule: 'Weekly Mon 6AM ET', active: true },
               { label: 'Facebook Marketplace', schedule: 'Mon/Wed/Fri 6AM ET', active: true },
-              { label: 'Facebook Groups', schedule: 'Tue/Thu 6AM ET', active: true },
             ].map(s => (
               <div key={s.label} style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -290,9 +285,7 @@ export default function HotLeadsPage() {
             <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10 }}>Leads by Source</div>
             {Object.entries({
               craigslist: 'Craigslist',
-              google_maps: 'Google Maps',
               facebook_marketplace: 'Facebook MP',
-              facebook_groups: 'FB Groups',
             }).map(([key, label]) => {
               const count = leads.filter(l => l.lead_source === key).length
               return (
