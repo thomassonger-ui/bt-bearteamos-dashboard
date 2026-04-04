@@ -27,7 +27,79 @@ export default function HotLeadsPage() {
   const [filterType, setFilterType] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [acceptedToday, setAcceptedToday] = useState(0)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [showUpload, setShowUpload] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadResult, setUploadResult] = useState<string | null>(null)
   const MAX_DAILY = 10
+
+  useEffect(() => {
+    setIsAdmin(sessionStorage.getItem('bt_is_admin') === 'true')
+  }, [])
+
+  function parseCSVLine(line: string): string[] {
+    const result: string[] = []
+    let current = ''
+    let inQuotes = false
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i]
+      if (ch === '"') { if (inQuotes && line[i + 1] === '"') { current += '"'; i++ } else inQuotes = !inQuotes }
+      else if (ch === ',' && !inQuotes) { result.push(current); current = '' }
+      else current += ch
+    }
+    result.push(current)
+    return result
+  }
+
+  async function handleCSVUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    setUploadResult(null)
+    try {
+      const text = await file.text()
+      const lines = text.split('\n').filter(l => l.trim())
+      if (lines.length < 2) { setUploadResult('CSV is empty.'); setUploading(false); return }
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''))
+
+      let added = 0
+      let skipped = 0
+      for (let i = 1; i < lines.length; i++) {
+        const vals = parseCSVLine(lines[i])
+        const get = (keys: string[]) => { for (const k of keys) { const idx = headers.indexOf(k); if (idx >= 0 && vals[idx]) return vals[idx].trim() } return '' }
+
+        const title = get(['address', 'title', 'name', 'lead_name', 'property', 'street'])
+        if (!title) { skipped++; continue }
+
+        const priceStr = get(['price', 'sale_price', 'asking_price', 'list_price'])
+        const price = priceStr ? parseFloat(priceStr.replace(/[$,]/g, '')) : undefined
+
+        const { error } = await getSupabase().from('pipeline').insert({
+          agent_id: 'a0000000-0000-0000-0000-000000000001',
+          lead_name: title.slice(0, 100),
+          stage: 'new_lead',
+          last_contact: new Date().toISOString(),
+          lead_source: get(['source']) || 'manual_upload',
+          urgency: 'normal',
+          arv: price && !isNaN(price) ? price : null,
+          property_address: get(['location', 'city', 'neighborhood', 'area']) || null,
+          zip_code: get(['zip', 'zipcode', 'zip_code', 'postal']) || null,
+          phone: get(['phone', 'contact', 'seller_phone']) || null,
+          email: get(['email', 'seller_email', 'contact_email']) || null,
+          notes: get(['description', 'notes', 'details', 'beds', 'baths']) || null,
+          source_url: get(['url', 'link', 'listing_url']) || null,
+          source_id: get(['url', 'id', 'listing_id']) || `upload_${Date.now()}_${i}`,
+          scraped_at: new Date().toISOString(),
+          is_hot_lead: true,
+        })
+        if (!error) added++
+        else skipped++
+      }
+      setUploadResult(`Imported ${added} lead${added !== 1 ? 's' : ''}${skipped > 0 ? `, ${skipped} skipped` : ''}.`)
+      fetchLeads()
+    } catch { setUploadResult('Error reading file.') }
+    finally { setUploading(false); e.target.value = '' }
+  }
 
   // Count how many leads this agent accepted today
   useEffect(() => {
@@ -121,6 +193,38 @@ export default function HotLeadsPage() {
             {acceptedToday}/{MAX_DAILY} accepted today
           </span>
         </div>
+
+        {/* Admin CSV Upload */}
+        {isAdmin && (
+          <div style={{ padding: '0 32px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: showUpload ? 0 : 8 }}>
+              <button onClick={() => setShowUpload(v => !v)} style={{
+                fontSize: 11, padding: '5px 12px', fontWeight: 600,
+                background: showUpload ? '#1976D2' : 'var(--bt-surface)',
+                border: '1px solid var(--bt-border)',
+                color: showUpload ? '#fff' : 'var(--bt-text-dim)',
+                borderRadius: 4, cursor: 'pointer',
+              }}>Upload Leads CSV</button>
+            </div>
+            {showUpload && (
+              <div style={{ marginTop: 8, marginBottom: 12, padding: '12px', background: 'rgba(25,118,210,0.06)', border: '1px solid rgba(25,118,210,0.2)', borderRadius: 6 }}>
+                <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', lineHeight: 1.6, marginBottom: 8 }}>
+                  Download FSBO listings from Zillow, ForSaleByOwner.com, etc. as CSV. Upload here to add to Hot Leads.<br />
+                  <strong>Required:</strong> <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>address</code> (or title/name)<br />
+                  <strong>Optional:</strong> <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>price</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>city</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>zip</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>phone</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>email</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>url</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>description</code>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <label style={{ fontSize: 11, padding: '6px 14px', fontWeight: 600, background: '#1976D2', color: '#fff', borderRadius: 4, cursor: 'pointer' }}>
+                    Choose CSV File
+                    <input type="file" accept=".csv" onChange={handleCSVUpload} style={{ display: 'none' }} />
+                  </label>
+                  {uploading && <span style={{ fontSize: 11, color: 'var(--bt-text-dim)' }}>Uploading...</span>}
+                  {uploadResult && <span style={{ fontSize: 11, color: uploadResult.includes('Error') ? '#E04E4E' : '#4CAF50' }}>{uploadResult}</span>}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {acceptedToday >= MAX_DAILY ? (
           <div style={{
