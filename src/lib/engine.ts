@@ -116,6 +116,64 @@ export async function runEngine(agentId: string): Promise<void> {
         source_ref: lead.id,
       })
       rule2Created++
+
+      // Auto follow-up email — send if lead has email and hasn't been emailed for this stall
+      if (lead.email) {
+        const emailSent = await ruleTaskExists(agentId, 'auto_followup_email', lead.id)
+        if (!emailSent) {
+          try {
+            // Generate follow-up via AI
+            const aiRes = await globalThis.fetch(process.env.NEXT_PUBLIC_SUPABASE_URL ? `${process.env.VERCEL_URL ? 'https://' + process.env.VERCEL_URL : 'http://localhost:3000'}/api/ai-writer` : 'http://localhost:3000/api/ai-writer', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                prompt: `Write a brief, warm follow-up email to ${lead.lead_name}, a ${lead.lead_type || 'potential client'} I haven't contacted in ${daysSince} days. Keep it short, casual, and low-pressure. Just checking in.`,
+                agentName: 'Tom Songer',
+                agentPhone: '407-758-8102',
+                clientName: lead.lead_name,
+              }),
+            })
+            if (aiRes.ok) {
+              const aiData = await aiRes.json()
+              const emailBody = aiData.reply ?? ''
+              if (emailBody) {
+                const subjectMatch = emailBody.match(/^Subject:\s*(.+)/m)
+                const subject = subjectMatch ? subjectMatch[1].trim() : `Following up — Bear Team Real Estate`
+                const body = emailBody.replace(/^Subject:\s*.+\n\n?/, '')
+
+                // Send via Resend
+                const sendRes = await globalThis.fetch(process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}/api/send-email` : 'http://localhost:3000/api/send-email', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ to: lead.email, subject, body }),
+                })
+                if (sendRes.ok) {
+                  // Mark as sent so we don't re-send
+                  await createTask({
+                    agent_id: agentId,
+                    type: 'auto_email',
+                    title: `Auto follow-up sent to ${lead.lead_name}`,
+                    description: `Automated follow-up email sent to ${lead.email} after ${daysSince} days of no contact.`,
+                    status: 'completed',
+                    due_date: now.toISOString(),
+                    completed_at: now.toISOString(),
+                    source_rule: 'auto_followup_email',
+                    source_ref: lead.id,
+                  })
+                  await logActivity({
+                    agent_id: agentId,
+                    action_type: 'auto_followup_sent',
+                    description: `Auto follow-up email sent to ${lead.lead_name} (${lead.email}) — ${daysSince}d stale`,
+                    outcome: 'success',
+                  })
+                }
+              }
+            }
+          } catch (err) {
+            console.error('[engine] auto followup email error:', err)
+          }
+        }
+      }
     }
   }
 
