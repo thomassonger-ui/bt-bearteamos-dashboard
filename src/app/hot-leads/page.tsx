@@ -36,7 +36,7 @@ export default function HotLeadsPage() {
   const [showUpload, setShowUpload] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadResult, setUploadResult] = useState<string | null>(null)
-  const MAX_DAILY = 10
+  const MAX_DAILY = 2
 
   useEffect(() => {
     setIsAdmin(sessionStorage.getItem('bt_is_admin') === 'true')
@@ -186,9 +186,16 @@ export default function HotLeadsPage() {
 
   async function acceptLead(leadId: string) {
     if (acceptedToday >= MAX_DAILY) return
+    const remaining = MAX_DAILY - acceptedToday
+    const confirmed = window.confirm(
+      `You are about to accept this lead.\n\n` +
+      `You have ${remaining} lead${remaining !== 1 ? 's' : ''} remaining today.\n` +
+      `After accepting ${MAX_DAILY} leads, this page will lock for 24 hours.\n\n` +
+      `This lead will be added to your pipeline. Continue?`
+    )
+    if (!confirmed) return
     const agentId = sessionStorage.getItem('bt_agent_id')
     if (!agentId) return
-    // Move lead to agent's pipeline
     await getSupabase()
       .from('pipeline')
       .update({ agent_id: agentId, stage: 'new_lead', is_hot_lead: false })
