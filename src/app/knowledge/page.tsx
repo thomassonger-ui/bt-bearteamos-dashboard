@@ -1,10 +1,9 @@
-import Sidebar from '@/components/Sidebar'
+import ResponsiveShell from '@/components/ResponsiveShell'
 import KnowledgeQuery from '@/components/KnowledgeQuery'
 
 export default function KnowledgePage() {
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar />
+    <ResponsiveShell>
       <main style={{ flex: 1, padding: '24px 28px', overflowY: 'auto', height: '100%' }}>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
           <div style={{ marginBottom: 20 }}>
@@ -19,6 +18,6 @@ export default function KnowledgePage() {
           <KnowledgeQuery />
         </div>
       </main>
-    </div>
+    </ResponsiveShell>
   )
 }

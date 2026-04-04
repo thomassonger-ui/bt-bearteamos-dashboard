@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import Sidebar from '@/components/Sidebar'
+import ResponsiveShell from '@/components/ResponsiveShell'
 import { getAgent, getFirstAgent, getClosedDeals } from '@/lib/queries'
 import type { Agent, Pipeline } from '@/types'
 
@@ -89,8 +89,7 @@ export default function CommissionsPage() {
   if (loading) return <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', color: 'var(--bt-text-dim)' }}>Loading&hellip;</div>
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar />
+    <ResponsiveShell>
       <main style={{ flex: 1, overflowY: 'auto', padding: '20px 28px' }}>
         <div style={{ maxWidth: 1000, margin: '0 auto' }}>
 
@@ -296,6 +295,6 @@ export default function CommissionsPage() {
 
         </div>
       </main>
-    </div>
+    </ResponsiveShell>
   )
 }

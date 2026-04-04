@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Sidebar from '@/components/Sidebar'
+import ResponsiveShell from '@/components/ResponsiveShell'
 import { getFirstAgent, getAgent } from '@/lib/queries'
 import { getPhaseLabel } from '@/lib/engine'
 import type { Agent } from '@/types'
@@ -23,8 +23,7 @@ export default function SettingsPage() {
   if (loading) return <div style={{ padding: 40, color: 'var(--bt-text-dim)' }}>Loading…</div>
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar />
+    <ResponsiveShell>
       <main style={{ flex: 1, padding: '24px 28px', overflowY: 'auto', height: '100%' }}>
         <div style={{ maxWidth: 600, margin: '0 auto' }}>
           <div style={{ marginBottom: 20 }}>
@@ -75,6 +74,6 @@ export default function SettingsPage() {
           </div>
         </div>
       </main>
-    </div>
+    </ResponsiveShell>
   )
 }

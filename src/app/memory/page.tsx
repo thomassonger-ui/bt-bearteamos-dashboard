@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Sidebar from '@/components/Sidebar'
+import ResponsiveShell from '@/components/ResponsiveShell'
 import MemoryLog from '@/components/MemoryLog'
 import { getFirstAgent, getAgent, getActivityLog } from '@/lib/queries'
 import type { Agent, ActivityLog } from '@/types'
@@ -30,8 +30,7 @@ export default function MemoryPage() {
   if (loading) return <div style={{ padding: 40, color: 'var(--bt-text-dim)' }}>Loading…</div>
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar />
+    <ResponsiveShell>
       <main style={{ flex: 1, padding: '24px 28px', overflowY: 'auto', height: '100%' }}>
         <div style={{ maxWidth: 900, margin: '0 auto' }}>
           <div style={{ marginBottom: 20 }}>
@@ -58,6 +57,6 @@ export default function MemoryPage() {
           <MemoryLog log={log} />
         </div>
       </main>
-    </div>
+    </ResponsiveShell>
   )
 }

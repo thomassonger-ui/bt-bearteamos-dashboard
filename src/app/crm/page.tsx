@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import Sidebar from '@/components/Sidebar'
+import ResponsiveShell from '@/components/ResponsiveShell'
 import { getAgent, getFirstAgent, getPipeline, insertHotLead } from '@/lib/queries'
 import type { Agent, Pipeline } from '@/types'
 
@@ -174,8 +174,7 @@ export default function CRMPage() {
   if (loading) return <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', color: 'var(--bt-text-dim)' }}>Loading&hellip;</div>
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      <Sidebar />
+    <ResponsiveShell>
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
 
         {/* Header */}
@@ -395,6 +394,6 @@ James Carter,seller,321-555-8834,james@example.com,123 Oak St Orlando,contacted,
           All contact data belongs exclusively to the agent who entered it. Contact information is private, not shared across agents, and is the sole property of the originating agent. Bear Team Real Estate does not claim ownership of agent-entered client data. Upon separation from the brokerage, agents retain full rights to their client contacts and relationships.
         </div>
       </main>
-    </div>
+    </ResponsiveShell>
   )
 }

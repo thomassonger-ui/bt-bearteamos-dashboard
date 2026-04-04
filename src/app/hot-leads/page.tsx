@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { getSupabase } from '@/lib/supabase'
 import type { Pipeline, HotLeadSource } from '@/types'
-import Sidebar from '@/components/Sidebar'
+import ResponsiveShell from '@/components/ResponsiveShell'
 import HotLeadCard from '@/components/HotLeadCard'
 import HotLeadSourcePanel from '@/components/HotLeadSourcePanel'
 
@@ -78,9 +78,8 @@ export default function HotLeadsPage() {
   const leadTypes = [...new Set(leads.map(l => l.hot_lead_type).filter(Boolean))]
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bt-bg)' }}>
-      <Sidebar />
-      <main style={{ flex: 1, padding: '24px 32px', maxWidth: 1200 }}>
+    <ResponsiveShell>
+      <main style={{ flex: 1, padding: '24px 32px', maxWidth: 1200, overflowY: 'auto' }}>
         {/* Header */}
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--bt-text)', marginBottom: 4 }}>
@@ -191,7 +190,7 @@ export default function HotLeadsPage() {
           <HotLeadSourcePanel sources={sources} />
         </div>
       </main>
-    </div>
+    </ResponsiveShell>
   )
 }
 
