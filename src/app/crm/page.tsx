@@ -48,7 +48,7 @@ export default function CRMPage() {
     const headers = ['lead_name', 'lead_type', 'phone', 'email', 'address', 'stage', 'notes', 'last_contact']
     const rows = contacts.map(c => [
       c.lead_name, c.lead_type || '', c.phone || '', c.email || '',
-      c.address || '', c.stage, c.notes || '',
+      c.property_address || '', c.stage, c.notes || '',
       new Date(c.last_contact).toLocaleDateString(),
     ])
     const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${(v ?? '').replace(/"/g, '""')}"`).join(','))].join('\n')
@@ -405,7 +405,7 @@ James Carter,seller,321-555-8834,james@example.com,123 Oak St Orlando,contacted,
                         <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 6, paddingTop: 4 }}>
                           <button onClick={() => {
                             setEditId(editId === contact.id ? null : contact.id)
-                            setEditData({ lead_name: contact.lead_name || '', phone: contact.phone || '', email: contact.email || '', address: contact.address || '', notes: contact.notes || '', lead_type: contact.lead_type || '', stage: contact.stage || '' })
+                            setEditData({ lead_name: contact.lead_name || '', phone: contact.phone || '', email: contact.email || '', property_address: contact.property_address || '', notes: contact.notes || '', lead_type: contact.lead_type || '', stage: contact.stage || '' })
                           }} style={{ fontSize: 9, padding: '3px 8px', background: editId === contact.id ? '#4CAF50' : 'transparent', border: '1px solid var(--bt-border)', color: editId === contact.id ? '#fff' : 'var(--bt-text-dim)', borderRadius: 3, cursor: 'pointer' }}>Edit</button>
                           <button onClick={() => hibernateContact(contact.id)} style={{ fontSize: 9, padding: '3px 8px', background: 'transparent', border: '1px solid var(--bt-border)', color: '#FF9800', borderRadius: 3, cursor: 'pointer' }}>Hibernate</button>
                           <button onClick={() => deleteContact(contact.id, contact.lead_name)} style={{ fontSize: 9, padding: '3px 8px', background: 'transparent', border: '1px solid var(--bt-border)', color: '#E04E4E', borderRadius: 3, cursor: 'pointer' }}>Delete</button>
@@ -420,7 +420,7 @@ James Carter,seller,321-555-8834,james@example.com,123 Oak St Orlando,contacted,
                               <input value={editData.email || ''} onChange={e => setEditData(d => ({ ...d, email: e.target.value }))} placeholder="Email" style={editInputStyle} />
                             </div>
                             <div style={{ marginBottom: 6 }}>
-                              <input value={editData.address || ''} onChange={e => setEditData(d => ({ ...d, address: e.target.value }))} placeholder="Address" style={editInputStyle} />
+                              <input value={editData.property_address || ''} onChange={e => setEditData(d => ({ ...d, property_address: e.target.value }))} placeholder="Address" style={editInputStyle} />
                             </div>
                             <div className="m-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: 6, marginBottom: 6 }}>
                               <select value={editData.lead_type || ''} onChange={e => setEditData(d => ({ ...d, lead_type: e.target.value }))} style={editInputStyle}>

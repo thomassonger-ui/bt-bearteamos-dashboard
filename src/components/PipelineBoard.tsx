@@ -33,7 +33,7 @@ export default function PipelineBoard({ pipeline, onContact, onSelectLead, selec
   const [emailSending, setEmailSending] = useState(false)
   const [emailStatus, setEmailStatus] = useState<string | null>(null)
   const [editLeadId, setEditLeadId] = useState<string | null>(null)
-  const [editData, setEditData] = useState<{ lead_name: string; phone: string; email: string; address: string; notes: string; lead_type: string }>({ lead_name: '', phone: '', email: '', address: '', notes: '', lead_type: '' })
+  const [editData, setEditData] = useState<{ lead_name: string; phone: string; email: string; property_address: string; notes: string; lead_type: string }>({ lead_name: '', phone: '', email: '', property_address: '', notes: '', lead_type: '' })
   const [editSaving, setEditSaving] = useState(false)
   const [apptLead, setApptLead] = useState<Pipeline | null>(null)
   const [apptDate, setApptDate] = useState('')
@@ -361,7 +361,7 @@ export default function PipelineBoard({ pipeline, onContact, onSelectLead, selec
                           <input value={editData.lead_name} onChange={e => setEditData(d => ({ ...d, lead_name: e.target.value }))} placeholder="Name" style={{ ...inputStyle, marginBottom: 4 }} />
                           <input value={editData.phone} onChange={e => setEditData(d => ({ ...d, phone: e.target.value }))} placeholder="Phone" style={{ ...inputStyle, marginBottom: 4 }} />
                           <input value={editData.email} onChange={e => setEditData(d => ({ ...d, email: e.target.value }))} placeholder="Email" style={{ ...inputStyle, marginBottom: 4 }} />
-                          <input value={editData.address} onChange={e => setEditData(d => ({ ...d, address: e.target.value }))} placeholder="Address" style={{ ...inputStyle, marginBottom: 4 }} />
+                          <input value={editData.property_address} onChange={e => setEditData(d => ({ ...d, property_address: e.target.value }))} placeholder="Address" style={{ ...inputStyle, marginBottom: 4 }} />
                           <select value={editData.lead_type} onChange={e => setEditData(d => ({ ...d, lead_type: e.target.value }))} style={{ ...inputStyle, marginBottom: 4 }}>
                             <option value="">Type</option>
                             <option value="buyer">Buyer</option>
@@ -393,7 +393,7 @@ export default function PipelineBoard({ pipeline, onContact, onSelectLead, selec
                               lead_name: lead.lead_name || '',
                               phone: lead.phone || '',
                               email: lead.email || '',
-                              address: lead.address || '',
+                              property_address: lead.property_address || '',
                               notes: lead.notes || '',
                               lead_type: lead.lead_type || '',
                             })
