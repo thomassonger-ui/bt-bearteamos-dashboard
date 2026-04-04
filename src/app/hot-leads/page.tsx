@@ -170,16 +170,17 @@ export default function HotLeadsPage() {
     finally { setUploading(false); e.target.value = '' }
   }
 
-  // Count how many leads this agent accepted today
+  // Count how many leads this agent accepted today — per agent
   useEffect(() => {
-    const storedDate = sessionStorage.getItem('bt_accept_date')
-    const storedCount = sessionStorage.getItem('bt_accept_count')
+    const agentId = sessionStorage.getItem('bt_agent_id') || 'default'
+    const storedDate = sessionStorage.getItem(`bt_accept_date_${agentId}`)
+    const storedCount = sessionStorage.getItem(`bt_accept_count_${agentId}`)
     const today = new Date().toDateString()
     if (storedDate === today && storedCount) {
       setAcceptedToday(parseInt(storedCount))
     } else {
-      sessionStorage.setItem('bt_accept_date', today)
-      sessionStorage.setItem('bt_accept_count', '0')
+      sessionStorage.setItem(`bt_accept_date_${agentId}`, today)
+      sessionStorage.setItem(`bt_accept_count_${agentId}`, '0')
       setAcceptedToday(0)
     }
   }, [])
@@ -200,10 +201,11 @@ export default function HotLeadsPage() {
       .from('pipeline')
       .update({ agent_id: agentId, stage: 'new_lead', is_hot_lead: false })
       .eq('id', leadId)
+    const aid = sessionStorage.getItem('bt_agent_id') || 'default'
     const newCount = acceptedToday + 1
     setAcceptedToday(newCount)
-    sessionStorage.setItem('bt_accept_count', newCount.toString())
-    sessionStorage.setItem('bt_accept_date', new Date().toDateString())
+    sessionStorage.setItem(`bt_accept_count_${aid}`, newCount.toString())
+    sessionStorage.setItem(`bt_accept_date_${aid}`, new Date().toDateString())
     fetchLeads()
   }
 
