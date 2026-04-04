@@ -148,7 +148,7 @@ export default function BrokerPage() {
       <div style={{ maxWidth: 1400, margin: '0 auto' }}>
 
       {brokerTab === 'commissions' ? (
-        <CommissionSummary agents={agents} allDeals={closedDeals} />
+        <CommissionSummary agents={agents} allDeals={closedDeals} onRefresh={handleRefresh} />
       ) : brokerTab === 'recruiting' ? (
         <div>
           {convertResult && (
