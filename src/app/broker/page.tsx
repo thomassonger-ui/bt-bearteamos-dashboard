@@ -8,6 +8,7 @@ import AgentTable from '@/components/broker/AgentTable'
 import AgentDetailPanel from '@/components/broker/AgentDetailPanel'
 import CommissionSummary from '@/components/broker/CommissionSummary'
 import RecruitPipeline from '@/components/broker/RecruitPipeline'
+import RecruiterPerformance from '@/components/broker/RecruiterPerformance'
 import {
   getAllAgents,
   getAllTasks,
@@ -33,7 +34,7 @@ export default function BrokerPage() {
   const [closedDeals, setClosedDeals] = useState<Pipeline[]>([])
   const [recruitLeads, setRecruitLeads] = useState<RecruitLead[]>([])
   const [loading, setLoading] = useState(true)
-  const [brokerTab, setBrokerTab] = useState<'agents' | 'commissions' | 'recruiting'>('agents')
+  const [brokerTab, setBrokerTab] = useState<'agents' | 'commissions' | 'recruiting' | 'performance'>('agents')
   const [convertingId, setConvertingId] = useState<string | null>(null)
   const [convertResult, setConvertResult] = useState<string | null>(null)
 
@@ -132,6 +133,7 @@ export default function BrokerPage() {
           { key: 'agents' as const, label: 'Agents & Performance' },
           { key: 'commissions' as const, label: 'Commissions & Revenue' },
           { key: 'recruiting' as const, label: 'Recruiting' },
+          { key: 'performance' as const, label: 'Recruiter/Trainer' },
         ]).map(tab => (
           <button key={tab.key} onClick={() => setBrokerTab(tab.key)} style={{
             padding: '10px 20px', fontSize: 11, fontWeight: brokerTab === tab.key ? 700 : 400,
@@ -149,6 +151,8 @@ export default function BrokerPage() {
 
       {brokerTab === 'commissions' ? (
         <CommissionSummary agents={agents} allDeals={closedDeals} onRefresh={handleRefresh} />
+      ) : brokerTab === 'performance' ? (
+        <RecruiterPerformance agents={agents} allDeals={closedDeals} />
       ) : brokerTab === 'recruiting' ? (
         <div>
           {convertResult && (
