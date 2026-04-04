@@ -405,7 +405,7 @@ James Carter,seller,321-555-8834,james@example.com,123 Oak St Orlando,contacted,
                         <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 6, paddingTop: 4 }}>
                           <button onClick={() => {
                             setEditId(editId === contact.id ? null : contact.id)
-                            setEditData({ lead_name: contact.lead_name || '', phone: contact.phone || '', email: contact.email || '', notes: contact.notes || '', lead_type: contact.lead_type || '', stage: contact.stage || '' })
+                            setEditData({ lead_name: contact.lead_name || '', phone: contact.phone || '', email: contact.email || '', address: contact.address || '', notes: contact.notes || '', lead_type: contact.lead_type || '', stage: contact.stage || '' })
                           }} style={{ fontSize: 9, padding: '3px 8px', background: editId === contact.id ? '#4CAF50' : 'transparent', border: '1px solid var(--bt-border)', color: editId === contact.id ? '#fff' : 'var(--bt-text-dim)', borderRadius: 3, cursor: 'pointer' }}>Edit</button>
                           <button onClick={() => hibernateContact(contact.id)} style={{ fontSize: 9, padding: '3px 8px', background: 'transparent', border: '1px solid var(--bt-border)', color: '#FF9800', borderRadius: 3, cursor: 'pointer' }}>Hibernate</button>
                           <button onClick={() => deleteContact(contact.id, contact.lead_name)} style={{ fontSize: 9, padding: '3px 8px', background: 'transparent', border: '1px solid var(--bt-border)', color: '#E04E4E', borderRadius: 3, cursor: 'pointer' }}>Delete</button>
@@ -418,6 +418,9 @@ James Carter,seller,321-555-8834,james@example.com,123 Oak St Orlando,contacted,
                               <input value={editData.lead_name || ''} onChange={e => setEditData(d => ({ ...d, lead_name: e.target.value }))} placeholder="Name" style={editInputStyle} />
                               <input value={editData.phone || ''} onChange={e => setEditData(d => ({ ...d, phone: e.target.value }))} placeholder="Phone" style={editInputStyle} />
                               <input value={editData.email || ''} onChange={e => setEditData(d => ({ ...d, email: e.target.value }))} placeholder="Email" style={editInputStyle} />
+                            </div>
+                            <div style={{ marginBottom: 6 }}>
+                              <input value={editData.address || ''} onChange={e => setEditData(d => ({ ...d, address: e.target.value }))} placeholder="Address" style={editInputStyle} />
                             </div>
                             <div className="m-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: 6, marginBottom: 6 }}>
                               <select value={editData.lead_type || ''} onChange={e => setEditData(d => ({ ...d, lead_type: e.target.value }))} style={editInputStyle}>
