@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import ResponsiveShell from '@/components/ResponsiveShell'
+import { getSupabase } from '@/lib/supabase'
 import { getAgent, getFirstAgent, getPipeline, insertHotLead } from '@/lib/queries'
 import type { Agent, Pipeline } from '@/types'
 
@@ -15,6 +16,30 @@ export default function CRMPage() {
   const [activeLetter, setActiveLetter] = useState<string | null>(null)
   const [filterType, setFilterType] = useState<string>('all')
   const [filterStage, setFilterStage] = useState<string>('all')
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editData, setEditData] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+
+  async function saveEdit() {
+    if (!editId || saving) return
+    setSaving(true)
+    await getSupabase().from('pipeline').update(editData).eq('id', editId)
+    if (agent) setContacts(await getPipeline(agent.id))
+    setEditId(null)
+    setSaving(false)
+  }
+
+  async function hibernateContact(id: string) {
+    if (!window.confirm('Hibernate this contact? They will be moved to "stalled" stage.')) return
+    await getSupabase().from('pipeline').update({ stage: 'stalled' }).eq('id', id)
+    if (agent) setContacts(await getPipeline(agent.id))
+  }
+
+  async function deleteContact(id: string, name: string) {
+    if (!window.confirm(`Delete ${name}? This cannot be undone.`)) return
+    await getSupabase().from('pipeline').delete().eq('id', id)
+    if (agent) setContacts(await getPipeline(agent.id))
+  }
   const [showImport, setShowImport] = useState(false)
   const [importStatus, setImportStatus] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
@@ -371,13 +396,55 @@ James Carter,seller,321-555-8834,james@example.com,123 Oak St Orlando,contacted,
                           }}>{stageLabel(contact.stage)}</span>
                         </div>
 
-                        {/* Last Contact */}
-                        <div style={{
-                          fontSize: 10,
-                          color: d >= 3 ? '#E04E4E' : d === 0 ? '#4CAF50' : 'var(--bt-text-dim)',
-                        }}>
-                          {d === 0 ? 'Today' : `${d}d ago`}
+                        {/* Last Contact + Actions */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{
+                            fontSize: 10,
+                            color: d >= 3 ? '#E04E4E' : d === 0 ? '#4CAF50' : 'var(--bt-text-dim)',
+                          }}>
+                            {d === 0 ? 'Today' : `${d}d ago`}
+                          </span>
+                          <button onClick={() => {
+                            setEditId(editId === contact.id ? null : contact.id)
+                            setEditData({ lead_name: contact.lead_name || '', phone: contact.phone || '', email: contact.email || '', notes: contact.notes || '', lead_type: contact.lead_type || '', stage: contact.stage || '' })
+                          }} style={{ fontSize: 9, padding: '2px 6px', background: editId === contact.id ? '#4CAF50' : 'transparent', border: '1px solid var(--bt-border)', color: editId === contact.id ? '#fff' : 'var(--bt-text-dim)', borderRadius: 3, cursor: 'pointer' }}>Edit</button>
+                          <button onClick={() => hibernateContact(contact.id)} style={{ fontSize: 9, padding: '2px 6px', background: 'transparent', border: '1px solid var(--bt-border)', color: '#FF9800', borderRadius: 3, cursor: 'pointer' }}>Hibernate</button>
+                          <button onClick={() => deleteContact(contact.id, contact.lead_name)} style={{ fontSize: 9, padding: '2px 6px', background: 'transparent', border: '1px solid var(--bt-border)', color: '#E04E4E', borderRadius: 3, cursor: 'pointer' }}>Delete</button>
                         </div>
+
+                        {/* Inline Edit Form */}
+                        {editId === contact.id && (
+                          <div style={{ gridColumn: '1 / -1', padding: '8px', background: 'var(--bt-muted)', borderRadius: 4, marginTop: 4 }}>
+                            <div className="m-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 6 }}>
+                              <input value={editData.lead_name || ''} onChange={e => setEditData(d => ({ ...d, lead_name: e.target.value }))} placeholder="Name" style={editInputStyle} />
+                              <input value={editData.phone || ''} onChange={e => setEditData(d => ({ ...d, phone: e.target.value }))} placeholder="Phone" style={editInputStyle} />
+                              <input value={editData.email || ''} onChange={e => setEditData(d => ({ ...d, email: e.target.value }))} placeholder="Email" style={editInputStyle} />
+                            </div>
+                            <div className="m-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: 6, marginBottom: 6 }}>
+                              <select value={editData.lead_type || ''} onChange={e => setEditData(d => ({ ...d, lead_type: e.target.value }))} style={editInputStyle}>
+                                <option value="">Type</option>
+                                <option value="buyer">Buyer</option>
+                                <option value="seller">Seller</option>
+                                <option value="rental">Rental</option>
+                              </select>
+                              <select value={editData.stage || ''} onChange={e => setEditData(d => ({ ...d, stage: e.target.value }))} style={editInputStyle}>
+                                <option value="new_lead">New Lead</option>
+                                <option value="attempting_contact">Attempting</option>
+                                <option value="contacted">Contacted</option>
+                                <option value="appointment_set">Appt Set</option>
+                                <option value="active_client">Active</option>
+                                <option value="under_contract">Under Contract</option>
+                                <option value="closed">Closed</option>
+                                <option value="stalled">Stalled</option>
+                              </select>
+                              <input value={editData.notes || ''} onChange={e => setEditData(d => ({ ...d, notes: e.target.value }))} placeholder="Notes" style={editInputStyle} />
+                            </div>
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button onClick={saveEdit} disabled={saving} style={{ fontSize: 10, padding: '4px 12px', fontWeight: 600, background: '#4CAF50', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }}>{saving ? '...' : 'Save'}</button>
+                              <button onClick={() => setEditId(null)} style={{ fontSize: 10, padding: '4px 12px', background: 'transparent', border: '1px solid var(--bt-border)', color: 'var(--bt-text-dim)', borderRadius: 3, cursor: 'pointer' }}>Cancel</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -396,4 +463,10 @@ James Carter,seller,321-555-8834,james@example.com,123 Oak St Orlando,contacted,
       </main>
     </ResponsiveShell>
   )
+}
+
+const editInputStyle: React.CSSProperties = {
+  width: '100%', padding: '6px 8px', fontSize: 11,
+  background: 'var(--bt-surface)', border: '1px solid var(--bt-border)',
+  color: 'var(--bt-text)', borderRadius: 3, outline: 'none', fontFamily: 'inherit',
 }
