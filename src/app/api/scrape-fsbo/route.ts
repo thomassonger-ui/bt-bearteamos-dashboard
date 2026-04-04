@@ -71,6 +71,8 @@ async function scrapeCraigslist(): Promise<Lead[]> {
     const listingRegex = /<li[^>]*class="[^"]*cl-static-search-result[^"]*"[^>]*>[\s\S]*?<\/li>/g
     const listings = html.match(listingRegex) || []
 
+    // Collect listing URLs first
+    const listingUrls: { title: string; price?: number; location: string; url: string }[] = []
     for (const listing of listings) {
       const titleMatch = listing.match(/<div[^>]*class="[^"]*title[^"]*"[^>]*>([\s\S]*?)<\/div>/)
       const priceMatch = listing.match(/<div[^>]*class="[^"]*price[^"]*"[^>]*>([\s\S]*?)<\/div>/)
@@ -80,13 +82,63 @@ async function scrapeCraigslist(): Promise<Lead[]> {
       const title = titleMatch?.[1]?.replace(/<[^>]*>/g, '').trim() || ''
       if (!title || isBlocked(title)) continue
 
-      leads.push({
+      listingUrls.push({
         title,
         price: extractPrice(priceMatch?.[1] || ''),
         location: locationMatch?.[1]?.replace(/<[^>]*>/g, '').trim() || 'Orlando, FL',
         url: linkMatch?.[1] || '',
-        source: 'craigslist',
       })
+    }
+
+    // Visit each listing to get full address, phone, description
+    for (const item of listingUrls.slice(0, 50)) {
+      try {
+        if (!item.url) { leads.push({ ...item, source: 'craigslist' }); continue }
+        const detailUrl = item.url.startsWith('http') ? item.url : `https://orlando.craigslist.org${item.url}`
+        const detailRes = await fetch(detailUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' },
+        })
+        const detailHtml = await detailRes.text()
+
+        // Get street address
+        const streetMatch = detailHtml.match(/<h2[^>]*class="street-address"[^>]*>([\s\S]*?)<\/h2>/)
+        const fullAddress = streetMatch?.[1]?.replace(/<[^>]*>/g, '').trim() || ''
+
+        // Get full title with price/beds from posting title
+        const fullTitleMatch = detailHtml.match(/<span[^>]*class="postingtitletext"[^>]*>([\s\S]*?)<\/span>\s*<\/h1>/)
+        const fullTitle = fullTitleMatch?.[1]?.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim() || item.title
+
+        // Get description
+        const descMatch = detailHtml.match(/<section[^>]*id="postingbody"[^>]*>([\s\S]*?)<\/section>/)
+        const description = descMatch?.[1]?.replace(/<[^>]*>/g, '').replace(/QR Code Link to This Post/i, '').trim().slice(0, 300) || ''
+
+        // Get JSON-LD for structured data
+        const jsonLdMatch = detailHtml.match(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/)
+        let streetAddr = '', zip = '', beds = '', baths = ''
+        if (jsonLdMatch) {
+          try {
+            const ld = JSON.parse(jsonLdMatch[1])
+            streetAddr = ld.address?.streetAddress || ''
+            zip = ld.address?.postalCode || ''
+            beds = ld.numberOfBedrooms || ''
+            baths = ld.numberOfBathroomsTotal || ''
+          } catch {}
+        }
+
+        const finalAddress = fullAddress || (streetAddr ? `${streetAddr}, Orlando, FL ${zip}` : item.location)
+        const finalTitle = streetAddr || item.title
+
+        leads.push({
+          title: finalTitle,
+          price: item.price,
+          location: finalAddress,
+          url: detailUrl,
+          source: 'craigslist',
+          description: description || (beds ? `${beds} bed, ${baths} bath` : undefined),
+        })
+      } catch {
+        leads.push({ ...item, source: 'craigslist' })
+      }
     }
 
     // Fallback: try JSON-LD or other patterns
