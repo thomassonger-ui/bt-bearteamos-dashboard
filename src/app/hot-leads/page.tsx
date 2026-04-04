@@ -20,6 +20,7 @@ const SOURCE_LABEL: Record<string, string> = {
   zillow_fsbo: 'Zillow FSBO',
   forsalebyowner: 'ForSaleByOwner.com',
   fsbo_com: 'FSBO.com',
+  byowner: 'ByOwner.com',
   manual_upload: 'Manual Upload',
 }
 
@@ -124,6 +125,7 @@ export default function HotLeadsPage() {
         if (url.includes('zillow.com')) detectedSource = 'zillow_fsbo'
         else if (url.includes('forsalebyowner.com')) detectedSource = 'forsalebyowner'
         else if (url.includes('fsbo.com')) detectedSource = 'fsbo_com'
+        else if (url.includes('byowner.com')) detectedSource = 'byowner'
 
         // Smart detect: location with FL
         let location = get(['location', 'city', 'neighborhood', 'area'])
@@ -280,6 +282,7 @@ export default function HotLeadsPage() {
                   <strong style={{ color: '#E04E4E' }}>Zillow FSBO:</strong> Go to <a href="https://www.zillow.com/orlando-fl/fsbo/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--bt-accent)' }}>zillow.com/orlando-fl/fsbo</a> &rarr; Scroll through listings &rarr; Copy addresses + prices into a spreadsheet &rarr; Save as .csv &rarr; Upload here<br />
                   <strong style={{ color: '#1976D2' }}>ForSaleByOwner.com:</strong> Go to <a href="https://www.forsalebyowner.com/search/fl/orlando" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--bt-accent)' }}>forsalebyowner.com/search/fl/orlando</a> &rarr; Copy listing data into spreadsheet &rarr; Save as .csv &rarr; Upload here<br />
                   <strong style={{ color: '#4CAF50' }}>FSBO.com:</strong> Go to <a href="https://www.fsbo.com/florida/orlando/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--bt-accent)' }}>fsbo.com/florida/orlando</a> &rarr; Copy listing data into spreadsheet &rarr; Save as .csv &rarr; Upload here<br />
+                  <strong style={{ color: '#9C27B0' }}>ByOwner.com:</strong> Go to <a href="https://www.byowner.com/orlando/florida" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--bt-accent)' }}>byowner.com/orlando/florida</a> &rarr; Instant Data Scraper &rarr; Download CSV &rarr; Upload here<br />
                   <strong style={{ color: '#FF9800' }}>Craigslist:</strong> Auto-scraped daily at 7AM ET &mdash; no action needed<br /><br />
                   <strong>CSV columns:</strong> <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>address</code> (required), <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>price</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>city</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>zip</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>phone</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>email</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>url</code>, <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>description</code>
                 </div>
@@ -436,6 +439,7 @@ export default function HotLeadsPage() {
               { label: 'Zillow FSBO', schedule: 'Manual CSV upload', active: true },
               { label: 'ForSaleByOwner', schedule: 'Manual CSV upload', active: true },
               { label: 'FSBO.com', schedule: 'Manual CSV upload', active: true },
+              { label: 'ByOwner.com', schedule: 'Manual CSV upload', active: true },
             ].map(s => (
               <div key={s.label} style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -463,6 +467,7 @@ export default function HotLeadsPage() {
               zillow_fsbo: 'Zillow FSBO',
               forsalebyowner: 'ForSaleByOwner',
               fsbo_com: 'FSBO.com',
+              byowner: 'ByOwner.com',
               manual_upload: 'Manual',
             }).map(([key, label]) => {
               const count = leads.filter(l => l.lead_source === key).length
