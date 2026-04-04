@@ -221,6 +221,74 @@ export default function PipelineBoard({ pipeline, onContact, onSelectLead, selec
                         </div>
                       )}
 
+                      {/* Transaction Timeline — Under Contract only */}
+                      {col.key === 'under_contract' && (
+                        <div onClick={e => e.stopPropagation()} style={{
+                          marginBottom: 6, padding: '6px', background: 'rgba(76,175,80,0.06)',
+                          border: '1px solid rgba(76,175,80,0.2)', borderRadius: 4,
+                        }}>
+                          {/* Closing countdown */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                            <span style={{ fontSize: 9, fontWeight: 700, color: '#4CAF50', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Closing Timeline</span>
+                            {lead.target_close_date && (
+                              <span style={{
+                                fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 2,
+                                background: Math.ceil((new Date(lead.target_close_date).getTime() - Date.now()) / 86400000) <= 7 ? '#E04E4E' : '#4CAF50',
+                                color: '#fff',
+                              }}>
+                                {Math.max(0, Math.ceil((new Date(lead.target_close_date).getTime() - Date.now()) / 86400000))}d left
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Close date setter */}
+                          {!lead.target_close_date && (
+                            <div style={{ marginBottom: 5 }}>
+                              <input
+                                type="date"
+                                onChange={async (e) => {
+                                  if (e.target.value) await onEditSave?.(lead.id, { target_close_date: new Date(e.target.value).toISOString() })
+                                }}
+                                style={{ width: '100%', padding: '3px 5px', fontSize: 9, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', color: 'var(--bt-text)', borderRadius: 3 }}
+                              />
+                            </div>
+                          )}
+
+                          {/* Milestones */}
+                          {[
+                            { key: 'milestone_inspection', label: 'Inspection', icon: '\uD83D\uDD0D' },
+                            { key: 'milestone_appraisal', label: 'Appraisal', icon: '\uD83D\uDCCA' },
+                            { key: 'milestone_financing', label: 'Financing', icon: '\uD83C\uDFE6' },
+                            { key: 'milestone_walkthrough', label: 'Final Walkthrough', icon: '\uD83D\uDEB6' },
+                          ].map(ms => {
+                            const done = !!(lead as unknown as Record<string, unknown>)[ms.key]
+                            return (
+                              <div
+                                key={ms.key}
+                                onClick={async () => {
+                                  await onEditSave?.(lead.id, { [ms.key]: (!done).toString() })
+                                }}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: 5, padding: '2px 0',
+                                  cursor: 'pointer', fontSize: 10,
+                                  color: done ? '#4CAF50' : 'var(--bt-text-dim)',
+                                  textDecoration: done ? 'line-through' : 'none',
+                                }}
+                              >
+                                <span style={{
+                                  width: 12, height: 12, borderRadius: 2, flexShrink: 0,
+                                  border: done ? '1px solid #4CAF50' : '1px solid var(--bt-border)',
+                                  background: done ? '#4CAF50' : 'transparent',
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  fontSize: 8, color: '#fff',
+                                }}>{done ? '\u2713' : ''}</span>
+                                <span>{ms.icon} {ms.label}</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+
                       {/* Action buttons row 1: Called, VM */}
                       <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 3 }}>
                         <button onClick={(e) => { e.stopPropagation(); onContact?.(lead.id, lead.lead_name) }}

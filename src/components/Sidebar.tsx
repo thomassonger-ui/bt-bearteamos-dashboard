@@ -184,18 +184,14 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div style={{ marginTop: 'auto', padding: '12px 16px', borderTop: '1px solid var(--bt-border)', display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-        {isAdmin ? (
+        {isAdmin && (
           <Link href="/broker" style={{
             fontSize: 11, fontWeight: 700, letterSpacing: '0.06em',
             color: 'var(--bt-black)', background: 'var(--bt-accent)',
             borderRadius: 4, padding: '6px 10px', textAlign: 'center',
             textDecoration: 'none',
           }}>
-            Admin View
-          </Link>
-        ) : (
-          <Link href="/broker" style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.06em', textDecoration: 'none' }}>
-            Broker View
+            Admin View &rarr;
           </Link>
         )}
         <Link href="/login" style={{ fontSize: 11, color: 'var(--bt-text-dim)', textDecoration: 'none' }}>

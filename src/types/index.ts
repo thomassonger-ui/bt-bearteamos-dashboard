@@ -68,6 +68,12 @@ export interface Pipeline {
   sale_price?: number
   commission_rate?: number
   gci?: number
+  // Transaction timeline
+  target_close_date?: string
+  milestone_inspection?: boolean
+  milestone_appraisal?: boolean
+  milestone_financing?: boolean
+  milestone_walkthrough?: boolean
   // Hot lead fields
   lead_source?: LeadSource
   hot_lead_type?: HotLeadType
