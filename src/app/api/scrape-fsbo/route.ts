@@ -17,6 +17,17 @@ const BLOCKLIST = [
   'wholesale', 'wholesaler', 'brokerage', 'licensed agent', 'licensed realtor',
   'broker', 'mls#', 'listed by', 'listing agent', 'schedule a showing',
   'open house hosted by', 'presented by', 'property management',
+  // Rentals
+  'for rent', 'per month', '/month', '/mo', 'monthly rent', 'lease',
+  'apartment', 'apt for rent', 'room for rent', 'roommate',
+  'sublease', 'sublet', 'move-in special', 'first month free',
+  'security deposit', 'utilities included', 'no pets', 'pet deposit',
+  'studio for rent', 'furnished room', 'unfurnished',
+  'available now', 'move in', 'move-in', 'rent includes',
+  'tenant', 'renter', 'rental', 'renting', 'home for rent',
+  'house for rent', 'condo for rent', 'townhouse for rent',
+  'duplex for rent', 'affordable apartment', 'bedroom apartment',
+  'laundry on site', 'w/d in unit',
 ]
 
 function isBlocked(text: string): boolean {
@@ -150,43 +161,77 @@ async function scrapeFSBOcom(): Promise<Lead[]> {
 async function scrapeZillow(): Promise<Lead[]> {
   const leads: Lead[] = []
   try {
-    const res = await fetch('https://www.zillow.com/orlando-fl/fsbo/', {
+    // Zillow's internal API for search results
+    const searchUrl = 'https://www.zillow.com/search/GetSearchPageState.htm'
+    const params = new URLSearchParams({
+      searchQueryState: JSON.stringify({
+        usersSearchTerm: 'Orlando, FL',
+        mapBounds: { west: -81.6, east: -81.1, south: 28.3, north: 28.7 },
+        filterState: {
+          fsbo: { value: true },
+          isForSaleByAgent: { value: false },
+          isForSaleByOwner: { value: true },
+          isNewConstruction: { value: false },
+          isAuction: { value: false },
+          isComingSoon: { value: false },
+          isForRent: { value: false },
+          isRecentlySold: { value: false },
+        },
+        isMapVisible: false,
+        isListVisible: true,
+      }),
+      wants: JSON.stringify({ cat1: ['listResults'] }),
+      requestId: '1',
+    })
+
+    const res = await fetch(`${searchUrl}?${params}`, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Accept': 'text/html,application/xhtml+xml',
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Referer': 'https://www.zillow.com/orlando-fl/fsbo/',
       },
     })
-    const html = await res.text()
 
-    // Zillow embeds listing data in <script id="__NEXT_DATA__"> or similar
-    const nextDataMatch = html.match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
-    if (nextDataMatch) {
-      try {
-        const data = JSON.parse(nextDataMatch[1])
-        const results = data?.props?.pageProps?.searchPageState?.cat1?.searchResults?.listResults || []
-        for (const r of results.slice(0, 50)) {
-          if (isBlocked(r.statusText || '')) continue
-          leads.push({
-            title: r.address || r.streetAddress || 'Zillow FSBO',
-            price: r.unformattedPrice || r.price,
-            location: `${r.addressCity || 'Orlando'}, ${r.addressState || 'FL'}`,
-            url: r.detailUrl ? `https://www.zillow.com${r.detailUrl}` : '',
-            source: 'zillow_fsbo',
-            description: `${r.beds || '?'} bed, ${r.baths || '?'} bath, ${r.area || '?'} sqft`,
-          })
-        }
-      } catch {}
+    if (res.ok) {
+      const data = await res.json()
+      const results = data?.cat1?.searchResults?.listResults || []
+      for (const r of results.slice(0, 50)) {
+        const addr = r.address || r.streetAddress || ''
+        if (!addr || isBlocked(addr + ' ' + (r.statusText || ''))) continue
+        leads.push({
+          title: addr,
+          price: r.unformattedPrice || r.price,
+          location: `${r.addressCity || 'Orlando'}, ${r.addressState || 'FL'} ${r.addressZipcode || ''}`,
+          url: r.detailUrl ? (r.detailUrl.startsWith('http') ? r.detailUrl : `https://www.zillow.com${r.detailUrl}`) : '',
+          source: 'zillow_fsbo',
+          description: `${r.beds || '?'} bed, ${r.baths || '?'} bath, ${r.area ? r.area + ' sqft' : ''}`.trim(),
+        })
+      }
     }
 
-    // Fallback: look for JSON-LD
-    const ldMatch = html.match(/"@type"\s*:\s*"SingleFamilyResidence"[\s\S]*?"name"\s*:\s*"([^"]*)"[\s\S]*?"url"\s*:\s*"([^"]*)"/g)
-    if (ldMatch) {
-      for (const m of ldMatch.slice(0, 20)) {
-        const name = m.match(/"name"\s*:\s*"([^"]*)"/)
-        const url = m.match(/"url"\s*:\s*"([^"]*)"/)
-        if (name && url) {
-          leads.push({ title: name[1], url: url[1], location: 'Orlando, FL', source: 'zillow_fsbo' })
-        }
+    // Fallback: try the HTML page
+    if (leads.length === 0) {
+      const htmlRes = await fetch('https://www.zillow.com/orlando-fl/fsbo/', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' },
+      })
+      const html = await htmlRes.text()
+      const nextDataMatch = html.match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
+      if (nextDataMatch) {
+        try {
+          const pageData = JSON.parse(nextDataMatch[1])
+          const results = pageData?.props?.pageProps?.searchPageState?.cat1?.searchResults?.listResults || []
+          for (const r of results.slice(0, 50)) {
+            if (isBlocked(r.statusText || '')) continue
+            leads.push({
+              title: r.address || r.streetAddress || 'Zillow FSBO',
+              price: r.unformattedPrice || r.price,
+              location: `${r.addressCity || 'Orlando'}, ${r.addressState || 'FL'}`,
+              url: r.detailUrl ? `https://www.zillow.com${r.detailUrl}` : '',
+              source: 'zillow_fsbo',
+              description: `${r.beds || '?'} bed, ${r.baths || '?'} bath, ${r.area || '?'} sqft`,
+            })
+          }
+        } catch {}
       }
     }
   } catch (err) {
@@ -218,8 +263,11 @@ export async function GET() {
     if (seen.has(key)) { skipped++; continue }
     seen.add(key)
 
-    // Block brokers/investors
+    // Block brokers/investors/rentals
     if (isBlocked(`${lead.title} ${lead.description || ''}`)) { skipped++; continue }
+
+    // Skip likely rentals — homes for sale are $50K+
+    if (lead.price && lead.price > 0 && lead.price < 20000) { skipped++; continue }
 
     // Check if already exists by source_id
     const sourceId = lead.url || key
