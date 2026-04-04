@@ -42,23 +42,20 @@ export default function LoginPage() {
         sessionStorage.removeItem('bt_is_admin')
       }
 
-      void (async () => {
-        try {
-          const agent = await getAgentByUsername(loggedInUsername) ?? await getFirstAgent()
-          if (!agent) return
-          sessionStorage.setItem('bt_agent_id', agent.id)
-          sessionStorage.setItem('bt_agent_name', agent.name)
-          await logActivity({
-            agent_id: agent.id,
-            action_type: 'login',
-            description: `Agent logged in: ${agent.name}`,
-            outcome: 'neutral',
-          })
-          await runEngine(agent.id)
-        } catch (bgErr) {
-          console.error('[login bg]', bgErr)
-        }
-      })()
+      // MUST resolve agent BEFORE navigating — otherwise dashboard falls back to wrong agent
+      const agent = await getAgentByUsername(loggedInUsername) ?? await getFirstAgent()
+      if (agent) {
+        sessionStorage.setItem('bt_agent_id', agent.id)
+        sessionStorage.setItem('bt_agent_name', agent.name)
+        // Background tasks — don't block navigation
+        logActivity({
+          agent_id: agent.id,
+          action_type: 'login',
+          description: `Agent logged in: ${agent.name}`,
+          outcome: 'neutral',
+        }).catch(() => {})
+        runEngine(agent.id).catch(() => {})
+      }
 
       router.push('/dashboard')
     } catch (err) {

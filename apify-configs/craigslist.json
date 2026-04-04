@@ -1,0 +1,25 @@
+{
+  "_actor": "automation-lab/craigslist-scraper",
+  "_notes": "Scrapes Craigslist Orlando real estate listings for motivated sellers",
+  "searchUrls": [
+    "https://orlando.craigslist.org/search/rea?query=must+sell",
+    "https://orlando.craigslist.org/search/rea?query=motivated+seller",
+    "https://orlando.craigslist.org/search/rea?query=as-is",
+    "https://orlando.craigslist.org/search/rea?query=fixer+upper",
+    "https://orlando.craigslist.org/search/rea?query=estate+sale",
+    "https://orlando.craigslist.org/search/rea?query=foreclosure"
+  ],
+  "maxItems": 100,
+  "includeDetails": true,
+  "maxConcurrency": 2,
+  "proxy": {
+    "useApifyProxy": true,
+    "apifyProxyGroups": ["RESIDENTIAL"]
+  },
+  "_webhook": {
+    "eventTypes": ["ACTOR.RUN.SUCCEEDED"],
+    "requestUrl": "YOUR_N8N_WEBHOOK_URL",
+    "payloadTemplate": "{\"source\": \"craigslist\", \"leads\": {{resource.defaultDatasetId}}}"
+  },
+  "_schedule": "Run daily at 7 AM ET — Cron: 0 11 * * *"
+}

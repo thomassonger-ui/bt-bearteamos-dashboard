@@ -1,0 +1,28 @@
+{
+  "_actor": "compass/crawler-google-places",
+  "_notes": "Scrapes Google Maps for real estate-adjacent businesses in Orlando metro",
+  "searchStringsArray": [
+    "we buy houses Orlando FL",
+    "property management Orlando FL",
+    "real estate attorney Orlando FL",
+    "title company Orlando FL",
+    "home inspector Orlando FL",
+    "motivated seller Orlando FL",
+    "wholesale real estate Orlando FL"
+  ],
+  "maxCrawledPlacesPerSearch": 50,
+  "language": "en",
+  "maxReviews": 0,
+  "maxImages": 0,
+  "includeWebResults": false,
+  "enrichCompanyContacts": true,
+  "proxy": {
+    "useApifyProxy": true
+  },
+  "_webhook": {
+    "eventTypes": ["ACTOR.RUN.SUCCEEDED"],
+    "requestUrl": "YOUR_N8N_WEBHOOK_URL",
+    "payloadTemplate": "{\"source\": \"google_maps\", \"leads\": {{resource.defaultDatasetId}}}"
+  },
+  "_schedule": "Run weekly on Monday at 6 AM ET — Cron: 0 10 * * 1"
+}

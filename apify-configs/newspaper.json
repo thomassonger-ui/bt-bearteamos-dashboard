@@ -1,0 +1,24 @@
+{
+  "_actor": "lukaskrivka/article-extractor-smart",
+  "_notes": "Scrapes Orlando news sites for foreclosure, probate, estate sale, and auction notices",
+  "startUrls": [
+    { "url": "https://www.orlandosentinel.com/search/?q=foreclosure" },
+    { "url": "https://www.orlandosentinel.com/search/?q=probate" },
+    { "url": "https://www.orlandosentinel.com/search/?q=estate+sale" },
+    { "url": "https://www.orlandosentinel.com/search/?q=auction+real+estate" },
+    { "url": "https://www.orlandoweekly.com/?s=foreclosure" },
+    { "url": "https://www.orlandoweekly.com/?s=estate+sale" }
+  ],
+  "maxArticles": 50,
+  "onlyNewArticles": true,
+  "saveHtml": false,
+  "proxy": {
+    "useApifyProxy": true
+  },
+  "_webhook": {
+    "eventTypes": ["ACTOR.RUN.SUCCEEDED"],
+    "requestUrl": "YOUR_N8N_WEBHOOK_URL",
+    "payloadTemplate": "{\"source\": \"newspaper\", \"leads\": {{resource.defaultDatasetId}}}"
+  },
+  "_schedule": "Run daily at 5 AM ET — Cron: 0 9 * * *"
+}

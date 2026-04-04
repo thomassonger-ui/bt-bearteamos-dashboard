@@ -1,5 +1,5 @@
 import { getSupabase } from './supabase'
-import type { Agent, Task, ActivityLog, Pipeline, ComplianceRecord } from '@/types'
+import type { Agent, Task, ActivityLog, Pipeline, ComplianceRecord, HotLeadSource } from '@/types'
 
 // ─── AGENT ────────────────────────────────────────────────────────────────────
 
@@ -240,6 +240,22 @@ export async function updateLastContact(pipelineId: string): Promise<void> {
   if (error) console.error('updateLastContact:', error.message)
 }
 
+export async function updatePipelineLead(pipelineId: string, data: Record<string, string>): Promise<void> {
+  const { error } = await getSupabase()
+    .from('pipeline')
+    .update(data)
+    .eq('id', pipelineId)
+  if (error) console.error('updatePipelineLead:', error.message)
+}
+
+export async function updatePipelineStage(pipelineId: string, stage: string): Promise<void> {
+  const { error } = await getSupabase()
+    .from('pipeline')
+    .update({ stage })
+    .eq('id', pipelineId)
+  if (error) console.error('updatePipelineStage:', error.message)
+}
+
 export async function getStalePipelineLeads(agentId: string, daysStale = 3): Promise<Pipeline[]> {
   const cutoff = new Date(Date.now() - daysStale * 24 * 60 * 60 * 1000).toISOString()
   const { data, error } = await getSupabase()
@@ -327,4 +343,88 @@ export async function resetMissedTasks(agentId: string): Promise<void> {
     .eq('agent_id', agentId)
     .eq('status', 'missed')
   if (error) console.error('resetMissedTasks:', error.message)
+}
+
+// ─── HOT LEADS ───────────────────────────────────────────────────────────────
+
+export async function getHotLeads(filters?: {
+  source?: string
+  urgency?: string
+  type?: string
+  zip?: string
+}): Promise<Pipeline[]> {
+  let query = getSupabase()
+    .from('pipeline')
+    .select('*')
+    .eq('is_hot_lead', true)
+    .order('created_at', { ascending: false })
+
+  if (filters?.source) query = query.eq('lead_source', filters.source)
+  if (filters?.urgency) query = query.eq('urgency', filters.urgency)
+  if (filters?.type) query = query.eq('hot_lead_type', filters.type)
+  if (filters?.zip) query = query.eq('zip_code', filters.zip)
+
+  const { data, error } = await query
+  if (error) { console.error('getHotLeads:', error.message); return [] }
+  return (data ?? []) as Pipeline[]
+}
+
+export async function insertHotLead(lead: Omit<Pipeline, 'id' | 'created_at'>): Promise<Pipeline | null> {
+  const { data, error } = await getSupabase()
+    .from('pipeline')
+    .insert(lead as any)
+    .select()
+    .single()
+  if (error) {
+    if (error.code === '23505') return null
+    console.error('insertHotLead:', error.message)
+    return null
+  }
+  return data as Pipeline
+}
+
+export async function upsertHotLead(lead: Omit<Pipeline, 'id' | 'created_at'>): Promise<Pipeline | null> {
+  if (lead.source_id) {
+    const { data: existing } = await getSupabase()
+      .from('pipeline')
+      .select('id')
+      .eq('source_id', lead.source_id)
+      .limit(1)
+    if (existing && existing.length > 0) return null
+  }
+  return insertHotLead(lead)
+}
+
+export async function assignHotLead(pipelineId: string, agentId: string): Promise<void> {
+  const { error } = await getSupabase()
+    .from('pipeline')
+    .update({ agent_id: agentId, stage: 'new_lead' })
+    .eq('id', pipelineId)
+  if (error) console.error('assignHotLead:', error.message)
+}
+
+export async function getHotLeadSources(): Promise<HotLeadSource[]> {
+  const { data, error } = await getSupabase()
+    .from('hot_lead_sources')
+    .select('*')
+    .order('source_name')
+  if (error) { console.error('getHotLeadSources:', error.message); return [] }
+  return (data ?? []) as HotLeadSource[]
+}
+
+export async function updateHotLeadSourceStatus(
+  sourceName: string,
+  status: string,
+  leadsFound: number
+): Promise<void> {
+  const { error } = await getSupabase()
+    .from('hot_lead_sources')
+    .update({
+      last_run_at: new Date().toISOString(),
+      last_run_status: status,
+      leads_found: leadsFound,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('source_name', sourceName)
+  if (error) console.error('updateHotLeadSourceStatus:', error.message)
 }

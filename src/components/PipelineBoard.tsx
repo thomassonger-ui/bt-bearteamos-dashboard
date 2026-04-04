@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import type { Pipeline } from '@/types'
 
 interface Props {
@@ -7,182 +8,436 @@ interface Props {
   onContact?: (pipelineId: string, leadName: string) => Promise<void>
   onSelectLead?: (lead: Pipeline | null) => void
   selectedLeadId?: string | null
+  onStageChange?: (pipelineId: string, newStage: string) => Promise<void>
+  onEditSave?: (pipelineId: string, data: Record<string, string>) => Promise<void>
 }
 
-const STAGE_ORDER = [
-  'new_lead',
-  'attempting_contact',
-  'contacted',
-  'appointment_set',
-  'active_client',
-  'under_contract',
-  'closed',
-  'stalled',
+const STAGES: { key: string; label: string; color: string }[] = [
+  { key: 'new_lead',           label: 'New Lead',        color: 'var(--bt-accent)' },
+  { key: 'attempting_contact', label: 'Attempting',      color: '#FF9800' },
+  { key: 'contacted',          label: 'Contacted',       color: '#6b9cf5' },
+  { key: 'appointment_set',    label: 'Appt Set',        color: '#a084e8' },
+  { key: 'active_client',      label: 'Active',          color: '#FF9800' },
+  { key: 'under_contract',     label: 'Under Contract',  color: '#4CAF50' },
 ]
 
-const STAGE_LABEL: Record<string, string> = {
-  new_lead:           'New Lead',
-  attempting_contact: 'Attempting Contact',
-  contacted:          'Contacted',
-  appointment_set:    'Appointment Set',
-  active_client:      'Active Client',
-  under_contract:     'Under Contract',
-  closed:             'Closed',
-  stalled:            'Stalled',
+function daysSince(iso: string) {
+  return Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24))
 }
 
-const STAGE_COLOR: Record<string, string> = {
-  new_lead:           'var(--bt-accent)',
-  attempting_contact: '#e0a040',
-  contacted:          '#6b9cf5',
-  appointment_set:    '#a084e8',
-  active_client:      '#4fbf8a',
-  under_contract:     'var(--bt-green)',
-  closed:             'var(--bt-green)',
-  stalled:            'var(--bt-red)',
-}
+export default function PipelineBoard({ pipeline, onContact, onSelectLead, selectedLeadId, onStageChange, onEditSave }: Props) {
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [dragOver, setDragOver] = useState<string | null>(null)
+  const [emailLead, setEmailLead] = useState<string | null>(null)
+  const [emailBody, setEmailBody] = useState('')
+  const [emailSending, setEmailSending] = useState(false)
+  const [emailStatus, setEmailStatus] = useState<string | null>(null)
+  const [editLeadId, setEditLeadId] = useState<string | null>(null)
+  const [editData, setEditData] = useState<{ lead_name: string; phone: string; email: string; notes: string; lead_type: string }>({ lead_name: '', phone: '', email: '', notes: '', lead_type: '' })
+  const [editSaving, setEditSaving] = useState(false)
+  const [apptLead, setApptLead] = useState<Pipeline | null>(null)
+  const [apptDate, setApptDate] = useState('')
+  const [apptTime, setApptTime] = useState('10:00')
+  const [apptDuration, setApptDuration] = useState('60')
+  const [apptTitle, setApptTitle] = useState('')
+  const [apptSaving, setApptSaving] = useState(false)
+  const [apptStatus, setApptStatus] = useState<string | null>(null)
 
-const TYPE_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  buyer:  { bg: 'rgba(107,156,245,0.15)', color: '#6b9cf5',          label: 'BUYER' },
-  seller: { bg: 'rgba(160,132,232,0.15)', color: '#a084e8',          label: 'SELLER' },
-  rental: { bg: 'rgba(209,166,84,0.15)',  color: 'var(--bt-accent)', label: 'RENTAL' },
-}
+  const grouped = STAGES.map(s => ({
+    ...s,
+    leads: pipeline.filter(p => p.stage === s.key),
+  }))
 
-function daysSince(isoString: string): number {
-  return Math.floor((Date.now() - new Date(isoString).getTime()) / (1000 * 60 * 60 * 24))
-}
+  const activeCount = pipeline.filter(p => !['closed', 'stalled'].includes(p.stage)).length
 
-export default function PipelineBoard({ pipeline, onContact, onSelectLead, selectedLeadId }: Props) {
-  const knownSet = new Set(STAGE_ORDER)
-  const legacyStages = [...new Set(pipeline.map((p) => p.stage))].filter((s) => !knownSet.has(s))
-  const allStages = [...STAGE_ORDER, ...legacyStages]
+  async function sendInlineEmail(lead: Pipeline) {
+    if (!lead.email || !emailBody.trim() || emailSending) return
+    setEmailSending(true)
+    setEmailStatus(null)
+    try {
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: lead.email,
+          subject: `Following up — Bear Team Real Estate`,
+          body: emailBody,
+          fromName: 'Tom Songer',
+          fromEmail: 'thomas.songer@gmail.com',
+        }),
+      })
+      if (res.ok) {
+        setEmailStatus('Sent!')
+        setEmailBody('')
+        setTimeout(() => { setEmailStatus(null); setEmailLead(null) }, 2000)
+      } else { setEmailStatus('Failed') }
+    } catch { setEmailStatus('Error') }
+    finally { setEmailSending(false) }
+  }
 
-  function handleLeadClick(lead: Pipeline) {
-    if (!onSelectLead) return
-    onSelectLead(selectedLeadId === lead.id ? null : lead)
+  function openApptSetter(lead: Pipeline) {
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    setApptLead(lead)
+    setApptDate(tomorrow.toISOString().split('T')[0])
+    setApptTime('10:00')
+    setApptDuration('60')
+    setApptTitle(`Meeting with ${lead.lead_name}`)
+    setApptStatus(null)
+  }
+
+  async function saveAppointment() {
+    if (!apptLead || !apptDate || !apptTime || apptSaving) return
+    setApptSaving(true)
+    setApptStatus(null)
+    try {
+      const [h, m] = apptTime.split(':').map(Number)
+      const start = new Date(`${apptDate}T${apptTime}:00`)
+      const end = new Date(start.getTime() + parseInt(apptDuration) * 60 * 1000)
+      const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+
+      // Create via Google Calendar API iframe
+      const title = encodeURIComponent(apptTitle || `Meeting with ${apptLead.lead_name}`)
+      const details = encodeURIComponent(`Lead: ${apptLead.lead_name}\nType: ${apptLead.lead_type || 'N/A'}\nPhone: ${apptLead.phone || 'N/A'}\nEmail: ${apptLead.email || 'N/A'}`)
+      const calUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${fmt(start)}/${fmt(end)}`
+
+      // Open in hidden iframe to avoid leaving page
+      const iframe = document.createElement('iframe')
+      iframe.style.display = 'none'
+      iframe.src = calUrl
+      document.body.appendChild(iframe)
+
+      // Also update lead stage to appointment_set
+      if (onStageChange) {
+        await onStageChange(apptLead.id, 'appointment_set')
+      }
+
+      setApptStatus('Saved! Check Google Calendar.')
+      setTimeout(() => {
+        setApptLead(null)
+        setApptStatus(null)
+        document.body.removeChild(iframe)
+      }, 2500)
+    } catch {
+      setApptStatus('Error')
+    } finally { setApptSaving(false) }
   }
 
   return (
-    <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6 }}>
-      <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--bt-border)' }}>
-        <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--bt-text-dim)' }}>
           Pipeline Board
-        </div>
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--bt-text-dim)' }}>&middot; {activeCount} Active</span>
       </div>
 
-      <div style={{ padding: '12px 20px' }}>
-        {allStages.map((stage) => {
-          const leads = pipeline.filter((p) => p.stage === stage)
-          return (
-            <div key={stage} style={{ marginBottom: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: STAGE_COLOR[stage] ?? 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600 }}>
-                  {STAGE_LABEL[stage] ?? stage}
-                </div>
-                <div style={{ fontSize: 11, color: 'var(--bt-text-dim)' }}>{leads.length}</div>
-              </div>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${STAGES.length}, 1fr)`, gap: 6, alignItems: 'start' }}>
+        {grouped.map(col => (
+          <div
+            key={col.key}
+            onDragOver={e => { e.preventDefault(); setDragOver(col.key) }}
+            onDragLeave={() => setDragOver(null)}
+            onDrop={async e => {
+              e.preventDefault()
+              setDragOver(null)
+              if (dragId && onStageChange) {
+                await onStageChange(dragId, col.key)
+              }
+              setDragId(null)
+            }}
+            style={{
+              background: dragOver === col.key ? 'rgba(123,183,183,0.05)' : 'transparent',
+              borderRadius: 6, transition: 'background 0.15s',
+              minHeight: 100,
+            }}
+          >
+            {/* Column header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '6px 8px', marginBottom: 6,
+              borderBottom: `2px solid ${col.color}`,
+            }}>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: col.color }}>
+                {col.label}
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--bt-text-dim)' }}>{col.leads.length}</span>
+            </div>
 
-              {leads.length === 0 ? (
-                <div style={{ fontSize: 12, color: 'var(--bt-text-dim)', fontStyle: 'italic' }}>—</div>
+            {/* Cards */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minHeight: 50 }}>
+              {col.leads.length === 0 ? (
+                <div style={{ fontSize: 11, color: 'var(--bt-muted)', fontStyle: 'italic', textAlign: 'center', padding: '12px 4px' }}>
+                  No leads here
+                </div>
               ) : (
-                leads.map((lead) => {
-                  const days = daysSince(lead.last_contact)
-                  const stale = days >= 3
-                  const typeStyle = lead.lead_type ? TYPE_STYLE[lead.lead_type] : null
-                  const isSelected = selectedLeadId === lead.id
+                col.leads.map(lead => {
+                  const d = daysSince(lead.last_contact)
+                  const selected = lead.id === selectedLeadId
+                  const stale = d >= 3
+                  const dotColor = d === 0 ? '#4CAF50' : stale ? '#E04E4E' : '#FF9800'
+                  const contactText = d === 0 ? 'Contacted today' : `${d}d \u2014 follow up`
+
                   return (
                     <div
                       key={lead.id}
-                      onClick={() => handleLeadClick(lead)}
+                      draggable
+                      onDragStart={() => setDragId(lead.id)}
+                      onDragEnd={() => { setDragId(null); setDragOver(null) }}
+                      onClick={() => onSelectLead?.(selectedLeadId === lead.id ? null : lead)}
                       style={{
-                        padding: '10px 14px', background: 'var(--bt-muted)', borderRadius: 4, marginBottom: 6,
-                        border: isSelected
-                          ? '1px solid var(--bt-accent)'
-                          : stale ? '1px solid rgba(224,82,82,0.3)' : '1px solid transparent',
-                        cursor: onSelectLead ? 'pointer' : 'default',
-                        transition: 'border-color 0.15s',
-                        outline: isSelected ? '1px solid rgba(123,183,183,0.2)' : 'none',
+                        background: selected ? 'rgba(123,183,183,0.08)' : 'var(--bt-surface)',
+                        border: selected ? '1px solid var(--bt-accent)' : '1px solid var(--bt-border)',
+                        borderRadius: 6, padding: '8px', cursor: 'grab',
+                        opacity: dragId === lead.id ? 0.5 : 1,
                       }}
                     >
-                      {/* Row 1: name + type badge + date + log contact */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                          <div style={{ fontWeight: 500, fontSize: 13 }}>{lead.lead_name}</div>
-                          {typeStyle && (
-                            <span style={{
-                              fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
-                              padding: '2px 6px', borderRadius: 3,
-                              background: typeStyle.bg, color: typeStyle.color,
-                            }}>
-                              {typeStyle.label}
-                            </span>
-                          )}
-                          {isSelected && (
-                            <span style={{ fontSize: 9, color: 'var(--bt-accent)', fontWeight: 700 }}>● coaching</span>
-                          )}
-                        </div>
-                        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                          <div style={{ fontSize: 11, color: stale ? 'var(--bt-red)' : 'var(--bt-text-dim)' }}>
-                            {days === 0 ? 'Today' : `${days}d ago`}
-                          </div>
-                          {onContact && stage !== 'closed' && (
-                            <button
-                              onClick={(e) => { e.stopPropagation(); onContact(lead.id, lead.lead_name) }}
-                              style={{ fontSize: 10, padding: '2px 7px', border: '1px solid var(--bt-accent)', background: 'transparent', color: 'var(--bt-accent)', borderRadius: 3, cursor: 'pointer' }}
-                            >
-                              Log Contact
-                            </button>
-                          )}
-                        </div>
+                      {/* Name row */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                        <span style={{ fontSize: 12, fontWeight: 600 }}>{lead.lead_name}</span>
+                        <div style={{ width: 7, height: 7, borderRadius: '50%', background: dotColor, flexShrink: 0 }} />
                       </div>
 
-                      {/* Row 2: phone (SMS) · email (Gmail compose) · address */}
-                      {(lead.phone || lead.email || lead.address) && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', marginTop: 5 }}>
-                          {lead.phone && (
-                            <a
-                              href={`sms:${lead.phone.replace(/\D/g, '')}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="Open in Messages"
-                              onClick={(e) => e.stopPropagation()}
-                              style={{ fontSize: 11, color: 'var(--bt-accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}
-                            >
-                              📱 {lead.phone}
-                            </a>
-                          )}
-                          {lead.email && (
-                            <a
-                              href={`https://mail.google.com/mail/?view=cm&to=${encodeURIComponent(lead.email)}&su=${encodeURIComponent('Following up — Bear Team Real Estate')}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              title="Compose in Gmail"
-                              onClick={(e) => e.stopPropagation()}
-                              style={{ fontSize: 11, color: 'var(--bt-accent)', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 3 }}
-                            >
-                              ✉ {lead.email}
-                            </a>
-                          )}
-                          {lead.address && (
-                            <span style={{ fontSize: 11, color: 'var(--bt-text-dim)', display: 'flex', alignItems: 'center', gap: 3 }}>
-                              📍 {lead.address}
-                            </span>
-                          )}
+                      {/* Badges */}
+                      <div style={{ display: 'flex', gap: 3, marginBottom: 3, flexWrap: 'wrap' }}>
+                        {lead.is_hot_lead && (
+                          <span style={{ fontSize: 8, fontWeight: 700, background: '#E04E4E', color: '#fff', borderRadius: 2, padding: '1px 4px' }}>NBC</span>
+                        )}
+                        {lead.lead_type && (
+                          <span style={{
+                            fontSize: 8, fontWeight: 700, borderRadius: 2, padding: '1px 4px',
+                            background: lead.lead_type === 'buyer' ? '#1976D2' : lead.lead_type === 'seller' ? '#E04E4E' : '#9C27B0',
+                            color: '#fff',
+                          }}>{lead.lead_type.toUpperCase()}</span>
+                        )}
+                      </div>
+
+                      {/* Contact status */}
+                      <div style={{ fontSize: 9, color: dotColor, marginBottom: 5 }}>{contactText}</div>
+
+                      {/* Notes preview */}
+                      {lead.notes && (
+                        <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', marginBottom: 6, lineHeight: 1.3 }}>
+                          {lead.notes.length > 60 ? lead.notes.slice(0, 60) + '...' : lead.notes}
                         </div>
                       )}
 
-                      {/* Row 3: notes */}
-                      {lead.notes && (
-                        <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginTop: 4 }}>{lead.notes}</div>
+                      {/* Action buttons row 1: Called, VM */}
+                      <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 3 }}>
+                        <button onClick={(e) => { e.stopPropagation(); onContact?.(lead.id, lead.lead_name) }}
+                          style={btnStyle('#26A69A', '#fff', true)}>Called</button>
+                        <button onClick={(e) => { e.stopPropagation(); onContact?.(lead.id, lead.lead_name) }}
+                          style={btnStyle('#37474F', '#fff')}>VM</button>
+                      </div>
+
+                      {/* Row 2: Spoke, Text */}
+                      <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 3 }}>
+                        <button onClick={(e) => { e.stopPropagation(); onContact?.(lead.id, lead.lead_name) }}
+                          style={btnStyle('var(--bt-border)', 'var(--bt-text-dim)')}>Spoke</button>
+                        <button onClick={(e) => {
+                            e.stopPropagation()
+                            if (lead.phone) window.open(`sms:${lead.phone.replace(/\D/g, '')}`)
+                            else alert('No phone number')
+                          }}
+                          style={btnStyle('var(--bt-border)', 'var(--bt-text-dim)')}>Text</button>
+                      </div>
+
+                      {/* Row 3: Email (inline), Appt */}
+                      <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 3 }}>
+                        <button onClick={(e) => {
+                            e.stopPropagation()
+                            if (!lead.email) { alert('No email for this lead'); return }
+                            setEmailLead(emailLead === lead.id ? null : lead.id)
+                            setEmailBody('')
+                            setEmailStatus(null)
+                          }}
+                          style={btnStyle(emailLead === lead.id ? '#1976D2' : 'var(--bt-border)', emailLead === lead.id ? '#fff' : 'var(--bt-text-dim)')}>Email</button>
+                        <button onClick={(e) => { e.stopPropagation(); openApptSetter(lead) }}
+                          style={btnStyle('var(--bt-border)', 'var(--bt-text-dim)')}>Appt</button>
+                      </div>
+
+                      {/* Inline email compose */}
+                      {emailLead === lead.id && lead.email && (
+                        <div onClick={e => e.stopPropagation()} style={{ marginBottom: 4, padding: '6px', background: 'var(--bt-muted)', borderRadius: 4 }}>
+                          <div style={{ fontSize: 9, color: 'var(--bt-text-dim)', marginBottom: 3 }}>To: {lead.email}</div>
+                          <textarea
+                            value={emailBody}
+                            onChange={e => setEmailBody(e.target.value)}
+                            placeholder="Type your message..."
+                            rows={3}
+                            style={{
+                              width: '100%', padding: '6px', fontSize: 10, lineHeight: 1.4,
+                              background: 'var(--bt-surface)', border: '1px solid var(--bt-border)',
+                              color: 'var(--bt-text)', borderRadius: 3, resize: 'none', outline: 'none',
+                              fontFamily: 'inherit',
+                            }}
+                          />
+                          <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                            <button
+                              onClick={() => sendInlineEmail(lead)}
+                              disabled={!emailBody.trim() || emailSending}
+                              style={{
+                                fontSize: 9, padding: '3px 8px', fontWeight: 600,
+                                background: emailBody.trim() ? '#E04E4E' : 'var(--bt-border)',
+                                border: 'none', color: '#fff', borderRadius: 3, cursor: emailBody.trim() ? 'pointer' : 'default',
+                              }}
+                            >{emailSending ? '...' : emailStatus || 'Send'}</button>
+                            <button onClick={() => setEmailLead(null)}
+                              style={{ fontSize: 9, padding: '3px 8px', background: 'transparent', border: '1px solid var(--bt-border)', color: 'var(--bt-text-dim)', borderRadius: 3, cursor: 'pointer' }}>Cancel</button>
+                          </div>
+                        </div>
                       )}
+
+                      {/* Inline Edit Form */}
+                      {editLeadId === lead.id && (
+                        <div onClick={e => e.stopPropagation()} style={{ marginBottom: 4, padding: '6px', background: 'var(--bt-muted)', borderRadius: 4 }}>
+                          <input value={editData.lead_name} onChange={e => setEditData(d => ({ ...d, lead_name: e.target.value }))} placeholder="Name" style={{ ...inputStyle, marginBottom: 4 }} />
+                          <input value={editData.phone} onChange={e => setEditData(d => ({ ...d, phone: e.target.value }))} placeholder="Phone" style={{ ...inputStyle, marginBottom: 4 }} />
+                          <input value={editData.email} onChange={e => setEditData(d => ({ ...d, email: e.target.value }))} placeholder="Email" style={{ ...inputStyle, marginBottom: 4 }} />
+                          <select value={editData.lead_type} onChange={e => setEditData(d => ({ ...d, lead_type: e.target.value }))} style={{ ...inputStyle, marginBottom: 4 }}>
+                            <option value="">Type</option>
+                            <option value="buyer">Buyer</option>
+                            <option value="seller">Seller</option>
+                            <option value="rental">Rental</option>
+                          </select>
+                          <textarea value={editData.notes} onChange={e => setEditData(d => ({ ...d, notes: e.target.value }))} placeholder="Notes" rows={2} style={{ ...inputStyle, resize: 'none', marginBottom: 4 }} />
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button onClick={async () => {
+                              setEditSaving(true)
+                              await onEditSave?.(lead.id, editData)
+                              setEditSaving(false)
+                              setEditLeadId(null)
+                            }} style={{ fontSize: 9, padding: '3px 8px', fontWeight: 600, background: '#4CAF50', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }}>
+                              {editSaving ? '...' : 'Save'}
+                            </button>
+                            <button onClick={() => setEditLeadId(null)} style={{ fontSize: 9, padding: '3px 8px', background: 'transparent', border: '1px solid var(--bt-border)', color: 'var(--bt-text-dim)', borderRadius: 3, cursor: 'pointer' }}>Cancel</button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Edit / Sleep / Stage */}
+                      <div style={{ display: 'flex', gap: 3, borderTop: '1px solid var(--bt-border)', paddingTop: 4, flexWrap: 'wrap' }}>
+                        <button onClick={(e) => {
+                            e.stopPropagation()
+                            if (editLeadId === lead.id) { setEditLeadId(null); return }
+                            setEditLeadId(lead.id)
+                            setEditData({
+                              lead_name: lead.lead_name || '',
+                              phone: lead.phone || '',
+                              email: lead.email || '',
+                              notes: lead.notes || '',
+                              lead_type: lead.lead_type || '',
+                            })
+                            onSelectLead?.(lead)
+                          }}
+                          style={editLeadId === lead.id ? { ...btnOutline, color: '#4CAF50', borderColor: '#4CAF50' } : btnOutline}>Edit</button>
+                        <button onClick={(e) => { e.stopPropagation(); onContact?.(lead.id, lead.lead_name) }}
+                          style={btnOutline}>Sleep</button>
+                        {/* Stage move buttons */}
+                        {col.key !== 'active_client' && (
+                          <button onClick={async (e) => { e.stopPropagation(); await onStageChange?.(lead.id, 'active_client') }}
+                            style={{ ...btnOutline, color: '#FF9800', borderColor: '#FF9800' }}>Active</button>
+                        )}
+                        {col.key !== 'under_contract' && (
+                          <button onClick={async (e) => { e.stopPropagation(); await onStageChange?.(lead.id, 'under_contract') }}
+                            style={{ ...btnOutline, color: '#4CAF50', borderColor: '#4CAF50' }}>Contract</button>
+                        )}
+                      </div>
                     </div>
                   )
                 })
               )}
             </div>
-          )
-        })}
+          </div>
+        ))}
       </div>
+      {/* Floating Appointment Setter */}
+      {apptLead && (
+        <>
+          <div onClick={() => setApptLead(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 300 }} />
+          <div style={{
+            position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+            width: 380, background: '#0d1825', border: '1px solid var(--bt-border)',
+            borderRadius: 8, padding: '20px', zIndex: 301,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Set Appointment</div>
+                <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginTop: 2 }}>{apptLead.lead_name}</div>
+              </div>
+              <button onClick={() => setApptLead(null)} style={{ background: 'transparent', border: 'none', color: 'var(--bt-text-dim)', fontSize: 20, cursor: 'pointer' }}>&times;</button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div>
+                <label style={labelStyle}>Title</label>
+                <input value={apptTitle} onChange={e => setApptTitle(e.target.value)}
+                  style={inputStyle} />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={labelStyle}>Date</label>
+                  <input type="date" value={apptDate} onChange={e => setApptDate(e.target.value)}
+                    style={inputStyle} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={labelStyle}>Time</label>
+                  <input type="time" value={apptTime} onChange={e => setApptTime(e.target.value)}
+                    style={inputStyle} />
+                </div>
+              </div>
+              <div>
+                <label style={labelStyle}>Duration</label>
+                <select value={apptDuration} onChange={e => setApptDuration(e.target.value)}
+                  style={inputStyle}>
+                  <option value="30">30 min</option>
+                  <option value="60">1 hour</option>
+                  <option value="90">1.5 hours</option>
+                  <option value="120">2 hours</option>
+                </select>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', padding: '6px 0' }}>
+                Lead: {apptLead.lead_type?.toUpperCase() || 'N/A'} &middot; {apptLead.phone || 'No phone'} &middot; {apptLead.email || 'No email'}
+              </div>
+              <button
+                onClick={saveAppointment}
+                disabled={!apptDate || apptSaving}
+                style={{
+                  width: '100%', padding: '10px', fontSize: 13, fontWeight: 700,
+                  background: apptStatus === 'Saved! Check Google Calendar.' ? '#4CAF50' : '#E04E4E',
+                  color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer',
+                }}
+              >
+                {apptSaving ? 'Setting...' : apptStatus || 'Set Appointment'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
+}
+
+const labelStyle: React.CSSProperties = {
+  display: 'block', fontSize: 10, fontWeight: 600, color: 'var(--bt-text-dim)',
+  letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 4,
+}
+
+const inputStyle: React.CSSProperties = {
+  width: '100%', padding: '8px 10px', fontSize: 12,
+  background: 'var(--bt-surface)', border: '1px solid var(--bt-border)',
+  color: 'var(--bt-text)', borderRadius: 4, outline: 'none',
+  fontFamily: 'inherit',
+}
+
+const btnStyle = (bg: string, color: string, bold = false): React.CSSProperties => ({
+  fontSize: 9, padding: '3px 7px', borderRadius: 3,
+  background: bg, color, border: 'none', cursor: 'pointer',
+  fontWeight: bold ? 600 : 400,
+})
+
+const btnOutline: React.CSSProperties = {
+  fontSize: 9, padding: '2px 6px', borderRadius: 3,
+  background: 'transparent', color: 'var(--bt-text-dim)',
+  border: '1px solid var(--bt-border)', cursor: 'pointer',
 }

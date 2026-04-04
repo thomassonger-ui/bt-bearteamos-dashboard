@@ -1,0 +1,23 @@
+{
+  "_actor": "great_pistachio/property-tax-scraper",
+  "_notes": "Scrapes county property tax records for delinquent properties in Central FL",
+  "county": "miami-dade",
+  "searchType": "address",
+  "searchQuery": "Orlando",
+  "maxItems": 200,
+  "proxy": {
+    "useApifyProxy": true
+  },
+  "_alt_approach": {
+    "_notes": "The property-tax-scraper may not cover Orange/Seminole/Osceola directly. Alternative: use a generic web scraper pointed at county appraiser sites.",
+    "orange_county": "https://www.ocpafl.org/Searches/ParcelSearch.aspx",
+    "seminole_county": "https://www.scpafl.org/",
+    "osceola_county": "https://www.property-appraiser.org/"
+  },
+  "_webhook": {
+    "eventTypes": ["ACTOR.RUN.SUCCEEDED"],
+    "requestUrl": "YOUR_N8N_WEBHOOK_URL",
+    "payloadTemplate": "{\"source\": \"county_appraisal\", \"leads\": {{resource.defaultDatasetId}}}"
+  },
+  "_schedule": "Run weekly on Wednesday at 6 AM ET — Cron: 0 10 * * 3"
+}

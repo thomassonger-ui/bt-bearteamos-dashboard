@@ -5,7 +5,7 @@ import Sidebar from '@/components/Sidebar'
 import PipelineBoard from '@/components/PipelineBoard'
 import ActivityChart from '@/components/ActivityChart'
 import CoachPanel from '@/components/CoachPanel'
-import { getFirstAgent, getAgent, getPipeline, updateLastContact, logActivity } from '@/lib/queries'
+import { getFirstAgent, getAgent, getPipeline, updateLastContact, updatePipelineStage, updatePipelineLead, logActivity } from '@/lib/queries'
 import { getWeeklyMetrics, paceColor, insightLine, TARGETS } from '@/lib/metrics'
 import type { Agent, Pipeline } from '@/types'
 import type { WeeklyMetrics } from '@/lib/metrics'
@@ -18,7 +18,18 @@ export default function PipelinePage() {
   const [logCallLoading, setLogCallLoading] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Pipeline | null>(null)
 
-  // Chat state
+  // Store selected lead for AI Writer
+  useEffect(() => {
+    if (selectedLead) {
+      sessionStorage.setItem('bt_selected_lead', JSON.stringify({
+        name: selectedLead.lead_name,
+        email: selectedLead.email || '',
+        phone: selectedLead.phone || '',
+      }))
+    }
+  }, [selectedLead])
+
+  // Chat state (Pipeline AI)
   const [chatInput, setChatInput] = useState('')
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([])
   const [chatLoading, setChatLoading] = useState(false)
@@ -47,6 +58,24 @@ export default function PipelinePage() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatMessages])
+
+  async function handleEditSave(pipelineId: string, data: Record<string, string>) {
+    await updatePipelineLead(pipelineId, data)
+    if (agent) setPipeline(await getPipeline(agent.id))
+  }
+
+  async function handleStageChange(pipelineId: string, newStage: string) {
+    await updatePipelineStage(pipelineId, newStage)
+    if (agent) {
+      await logActivity({
+        agent_id: agent.id,
+        action_type: 'stage_change',
+        description: `Moved lead to ${newStage}`,
+        outcome: 'success',
+      })
+      setPipeline(await getPipeline(agent.id))
+    }
+  }
 
   async function handleContact(pipelineId: string, leadName: string) {
     await updateLastContact(pipelineId)
@@ -81,35 +110,16 @@ export default function PipelinePage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const w = window as any
     const SpeechRecognition = w.SpeechRecognition || w.webkitSpeechRecognition
-
-    if (!SpeechRecognition) {
-      alert('Speech recognition not supported in this browser.')
-      return
-    }
-
-    if (listening && recognitionRef.current) {
-      recognitionRef.current.stop()
-      setListening(false)
-      return
-    }
-
+    if (!SpeechRecognition) { alert('Speech recognition not supported.'); return }
+    if (listening && recognitionRef.current) { recognitionRef.current.stop(); setListening(false); return }
     const recognition = new SpeechRecognition()
-    recognition.continuous = false
-    recognition.interimResults = false
-    recognition.lang = 'en-US'
+    recognition.continuous = false; recognition.interimResults = false; recognition.lang = 'en-US'
     recognitionRef.current = recognition
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript
-      setChatInput(prev => prev ? prev + ' ' + transcript : transcript)
-      setListening(false)
-    }
+    recognition.onresult = (event: any) => { setChatInput(prev => prev ? prev + ' ' + event.results[0][0].transcript : event.results[0][0].transcript); setListening(false) }
     recognition.onerror = () => setListening(false)
     recognition.onend = () => setListening(false)
-
-    recognition.start()
-    setListening(true)
+    recognition.start(); setListening(true)
   }
 
   async function sendChat(e: React.FormEvent) {
@@ -121,20 +131,18 @@ export default function PipelinePage() {
     setChatLoading(true)
     try {
       const res = await fetch('/api/pipeline-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: userMsg, agentId: agent.id, pipeline }),
       })
       const data = await res.json()
       setChatMessages(prev => [...prev, { role: 'assistant', content: data.reply ?? 'Done.' }])
-      if (data.action_type && data.action_type !== 'none' && data.action_type !== 'ask_type') {
+      // Refresh pipeline if any action was taken
+      if (data.action) {
         setPipeline(await getPipeline(agent.id))
       }
     } catch {
-      setChatMessages(prev => [...prev, { role: 'assistant', content: 'Error — please try again.' }])
-    } finally {
-      setChatLoading(false)
-    }
+      setChatMessages(prev => [...prev, { role: 'assistant', content: 'Error \u2014 please try again.' }])
+    } finally { setChatLoading(false) }
   }
 
   const stalled = pipeline.filter((p) => {
@@ -142,138 +150,37 @@ export default function PipelinePage() {
     return days >= 3 && p.stage !== 'closed'
   })
 
-  if (loading) return <div style={{ padding: 40, color: 'var(--bt-text-dim)' }}>Loading…</div>
+  // Next best call - most stale non-closed lead
+  const nextBestCall = [...pipeline]
+    .filter(p => p.stage !== 'closed' && p.stage !== 'stalled')
+    .sort((a, b) => new Date(a.last_contact).getTime() - new Date(b.last_contact).getTime())[0]
+
+  if (loading) return <div style={{ padding: 40, color: 'var(--bt-text-dim)' }}>Loading\u2026</div>
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
       <Sidebar />
-      <main style={{ flex: 1, overflow: 'hidden', height: '100%' }}>
-        {/* Outer flex: left = main content, right = sticky Coach panel */}
-        <div style={{ display: 'flex', height: '100%' }}>
+      <main style={{ flex: 1, overflow: 'hidden', height: '100%', display: 'grid', gridTemplateColumns: '1fr 270px', gap: 0 }}>
 
-        {/* ── Left: fixed height, internal scroll only on pipeline board ── */}
-        <div style={{ flex: 1, minWidth: 0, padding: '16px 20px 0 20px', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        {/* ═══ LEFT: Main content ═══ */}
+        <div style={{ padding: '12px 16px 0 20px', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', minWidth: 0 }}>
 
-          {/* Title — compact */}
-          <div style={{ marginBottom: 10, flexShrink: 0 }}>
+          {/* Title + disclaimer */}
+          <div style={{ marginBottom: 8, flexShrink: 0 }}>
             <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>Pipeline</div>
-            <div style={{ fontSize: 17, fontWeight: 700 }}>{agent?.name ?? '—'}</div>
+            <div style={{ fontSize: 17, fontWeight: 700 }}>{agent?.name ?? '\u2014'}</div>
+            <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', marginTop: 2 }}>Client data belongs to the agent who enters it and is not shared across agents.</div>
           </div>
 
-          {/* 90-day chart + Pipeline AI — side by side, fixed height */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 10, alignItems: 'stretch', flexShrink: 0 }}>
-
-            {/* Left: 90-day Activity Chart */}
-            {agent && (
-              <ActivityChart
-                agentId={agent.id}
-                onLogCall={logCall}
-                logCallLoading={logCallLoading}
-              />
-            )}
-
-            {/* Right: Pipeline AI — square box, full height */}
-            <div style={{
-              background: 'var(--bt-surface)',
-              border: '1px solid var(--bt-border)',
-              borderRadius: 6,
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-            }}>
-              {/* Chat header */}
-              <div style={{
-                padding: '12px 16px',
-                borderBottom: '1px solid var(--bt-border)',
-                display: 'flex', alignItems: 'center', gap: 7,
-                flexShrink: 0,
-              }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--bt-accent)', flexShrink: 0 }} />
-                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--bt-text-dim)' }}>
-                  Pipeline AI
-                </span>
-              </div>
-
-              {/* Messages — fills available space */}
-              <div style={{ flex: 1, padding: '12px 16px', overflowY: 'auto', minHeight: 0 }}>
-                {chatMessages.length === 0 ? (
-                  <div style={{ fontSize: 12, color: 'var(--bt-text-dim)', fontStyle: 'italic', lineHeight: 1.6 }}>
-                    Add, update, or remove leads.<br />
-                    <span style={{ opacity: 0.7 }}>e.g. John Smith buyer $450K 3/2 Winter Park</span>
-                  </div>
-                ) : (
-                  chatMessages.map((m, i) => (
-                    <div key={i} style={{
-                      marginBottom: 8,
-                      fontSize: 12,
-                      color: m.role === 'user' ? 'var(--bt-text)' : 'var(--bt-accent)',
-                      paddingLeft: m.role === 'assistant' ? 8 : 0,
-                      borderLeft: m.role === 'assistant' ? '2px solid var(--bt-accent)' : 'none',
-                      lineHeight: 1.5,
-                    }}>
-                      {m.content}
-                    </div>
-                  ))
-                )}
-                {chatLoading && (
-                  <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', fontStyle: 'italic' }}>Thinking…</div>
-                )}
-                <div ref={chatEndRef} />
-              </div>
-
-              {/* Input row — pinned to bottom */}
-              <form onSubmit={sendChat} style={{
-                display: 'flex', alignItems: 'center',
-                borderTop: '1px solid var(--bt-border)',
-                flexShrink: 0,
-              }}>
-                <input
-                  value={chatInput}
-                  onChange={e => setChatInput(e.target.value)}
-                  placeholder='e.g. "407-555-1212 john@gmail.com"'
-                  disabled={chatLoading}
-                  style={{
-                    flex: 1, padding: '10px 14px', fontSize: 12,
-                    background: 'transparent', border: 'none', outline: 'none',
-                    color: 'var(--bt-text)',
-                  }}
-                />
-                {/* Mic button */}
-                <button
-                  type="button"
-                  onClick={toggleMic}
-                  title={listening ? 'Stop listening' : 'Speak a lead'}
-                  style={{
-                    padding: '10px 8px',
-                    background: 'transparent', border: 'none', cursor: 'pointer',
-                    fontSize: 15,
-                    color: listening ? 'var(--bt-red)' : 'var(--bt-text-dim)',
-                    flexShrink: 0,
-                  }}
-                >
-                  {listening ? '⏹' : '🎙'}
-                </button>
-                {/* Send button */}
-                <button
-                  type="submit"
-                  disabled={chatLoading || !chatInput.trim()}
-                  style={{
-                    padding: '10px 14px',
-                    background: chatInput.trim() ? 'var(--bt-accent)' : 'var(--bt-border)',
-                    border: 'none', color: 'var(--bt-black)',
-                    fontWeight: 700, fontSize: 13,
-                    cursor: chatInput.trim() ? 'pointer' : 'default',
-                    flexShrink: 0,
-                  }}
-                >
-                  →
-                </button>
-              </form>
+          {/* 90-day Activity Chart */}
+          {agent && (
+            <div style={{ flexShrink: 0, marginBottom: 8 }}>
+              <ActivityChart agentId={agent.id} onLogCall={logCall} logCallLoading={logCallLoading} />
             </div>
-          </div>
+          )}
 
-          {/* KPI bar — 8 cards, equal width, full row */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 8, marginBottom: 4, flexShrink: 0 }}>
+          {/* KPI bar */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 6, marginBottom: 4, flexShrink: 0 }}>
             {[
               ...(metrics ? [
                 { label: 'Calls', value: metrics.calls_this_week, target: TARGETS.calls, color: paceColor(metrics.call_pace) },
@@ -281,10 +188,10 @@ export default function PipelinePage() {
                 { label: 'Active', value: metrics.active_clients + metrics.under_contract, color: 'var(--bt-text)' },
                 { label: 'Proj.', value: metrics.listing_projection.toFixed(1), color: 'var(--bt-text)' },
               ] : [
-                { label: 'Calls', value: '—', color: 'var(--bt-text-dim)' },
-                { label: 'Appts', value: '—', color: 'var(--bt-text-dim)' },
-                { label: 'Active', value: '—', color: 'var(--bt-text-dim)' },
-                { label: 'Proj.', value: '—', color: 'var(--bt-text-dim)' },
+                { label: 'Calls', value: '\u2014', color: 'var(--bt-text-dim)' },
+                { label: 'Appts', value: '\u2014', color: 'var(--bt-text-dim)' },
+                { label: 'Active', value: '\u2014', color: 'var(--bt-text-dim)' },
+                { label: 'Proj.', value: '\u2014', color: 'var(--bt-text-dim)' },
               ]),
               { label: 'Leads', value: pipeline.length, color: 'var(--bt-text)' },
               { label: 'Contract', value: pipeline.filter(p => p.stage === 'under_contract').length, color: 'var(--bt-text)' },
@@ -292,56 +199,109 @@ export default function PipelinePage() {
               { label: 'Closed', value: pipeline.filter(p => p.stage === 'closed').length, color: 'var(--bt-green)' },
             ].map((s) => (
               <div key={s.label} style={{
-                background: 'var(--bt-surface)',
-                border: '1px solid var(--bt-border)',
-                borderRadius: 5,
-                padding: '10px 6px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 3,
+                background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 5,
+                padding: '8px 4px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
               }}>
-                <span style={{ fontSize: 22, fontWeight: 700, lineHeight: 1, color: s.color }}>
-                  {s.value}{'target' in s && s.target ? <span style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginLeft: 2 }}>/{s.target}</span> : null}
+                <span style={{ fontSize: 20, fontWeight: 700, lineHeight: 1, color: s.color }}>
+                  {s.value}{'target' in s && s.target ? <span style={{ fontSize: 10, color: 'var(--bt-text-dim)', marginLeft: 1 }}>/{s.target}</span> : null}
                 </span>
-                <span style={{ fontSize: 9, color: 'var(--bt-text-dim)', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>{s.label}</span>
+                <span style={{ fontSize: 8, color: 'var(--bt-text-dim)', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>{s.label}</span>
               </div>
             ))}
           </div>
+
           {metrics && (
-            <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', fontStyle: 'italic', marginBottom: 6, flexShrink: 0 }}>
+            <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', fontStyle: 'italic', marginBottom: 4, flexShrink: 0 }}>
               {insightLine(metrics)}
             </div>
           )}
 
           {stalled.length > 0 && (
-            <div style={{ marginBottom: 6, padding: '5px 10px', background: 'rgba(224,82,82,0.08)', border: '1px solid rgba(224,82,82,0.3)', borderRadius: 4, fontSize: 11, color: 'var(--bt-red)', flexShrink: 0 }}>
-              ⚠ {stalled.length} lead{stalled.length > 1 ? 's' : ''} with no contact in 3+ days
+            <div style={{ marginBottom: 6, padding: '4px 10px', background: 'rgba(224,82,82,0.08)', border: '1px solid rgba(224,82,82,0.3)', borderRadius: 4, fontSize: 11, color: 'var(--bt-red)', flexShrink: 0 }}>
+              &#9888; {stalled.length} lead{stalled.length > 1 ? 's' : ''} with no contact in 3+ days
             </div>
           )}
 
-          {/* Pipeline board — takes remaining space, scrolls internally */}
-          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0, paddingBottom: 16 }}>
-            <PipelineBoard pipeline={pipeline} onContact={handleContact} onSelectLead={setSelectedLead} selectedLeadId={selectedLead?.id ?? null} />
+          {/* Next Best Call */}
+          {nextBestCall && (
+            <div style={{
+              flexShrink: 0, marginBottom: 8, padding: '10px 14px',
+              background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            }}>
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#FF9800', letterSpacing: '0.06em', marginBottom: 2 }}>&#9889; Next Best Call</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600 }}>{nextBestCall.lead_name}</span>
+                  <span style={{ fontSize: 10, color: '#4CAF50' }}>
+                    {Math.floor((Date.now() - new Date(nextBestCall.last_contact).getTime()) / 86400000) === 0 ? 'Contacted today' : `${Math.floor((Date.now() - new Date(nextBestCall.last_contact).getTime()) / 86400000)}d ago`}
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => handleContact(nextBestCall.id, nextBestCall.lead_name)}
+                style={{
+                  padding: '8px 16px', background: '#1976D2', color: '#fff', border: 'none',
+                  borderRadius: 4, fontWeight: 700, fontSize: 12, cursor: 'pointer',
+                }}
+              >Call Now</button>
+            </div>
+          )}
+
+          {/* Pipeline board - scrollable */}
+          <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+            <PipelineBoard pipeline={pipeline} onContact={handleContact} onSelectLead={setSelectedLead} selectedLeadId={selectedLead?.id ?? null} onStageChange={handleStageChange} onEditSave={handleEditSave} />
           </div>
-
-        </div>{/* end left col */}
-
-        {/* ── Right: Coach / Scout panel — full height, no scroll ── */}
-        <div style={{
-          width: 270,
-          flexShrink: 0,
-          height: '100%',
-          padding: '16px 12px 16px 0',
-          borderLeft: '1px solid var(--bt-border)',
-          display: 'flex',
-          flexDirection: 'column',
-        }}>
-          <CoachPanel selectedLead={selectedLead} />
         </div>
 
-        </div>{/* end outer flex */}
+        {/* ═══ RIGHT: Pipeline AI + Coach ═══ */}
+        <div style={{ borderLeft: '1px solid var(--bt-border)', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+
+          {/* Pipeline AI */}
+          <div style={{
+            background: 'var(--bt-surface)', borderBottom: '1px solid var(--bt-border)',
+            display: 'flex', flexDirection: 'column', height: 240, flexShrink: 0,
+          }}>
+            <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--bt-border)', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--bt-accent)' }} />
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--bt-text-dim)' }}>Pipeline AI</span>
+            </div>
+            <div style={{ flex: 1, padding: '10px 14px', overflowY: 'auto', minHeight: 0 }}>
+              {chatMessages.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--bt-text-dim)', fontStyle: 'italic', lineHeight: 1.6 }}>
+                  Add, update, or remove leads.<br />
+                  <span style={{ opacity: 0.7 }}>e.g. John Smith buyer $450K 3/2 Winter Park</span>
+                </div>
+              ) : chatMessages.map((m, i) => (
+                <div key={i} style={{
+                  marginBottom: 8, fontSize: 12, lineHeight: 1.5,
+                  color: m.role === 'user' ? 'var(--bt-text)' : 'var(--bt-accent)',
+                  paddingLeft: m.role === 'assistant' ? 8 : 0,
+                  borderLeft: m.role === 'assistant' ? '2px solid var(--bt-accent)' : 'none',
+                }}>{m.content}</div>
+              ))}
+              {chatLoading && <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', fontStyle: 'italic' }}>Thinking&hellip;</div>}
+              <div ref={chatEndRef} />
+            </div>
+            <form onSubmit={sendChat} style={{ display: 'flex', alignItems: 'center', borderTop: '1px solid var(--bt-border)', flexShrink: 0 }}>
+              <input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder='e.g. "407-555-1212 john@gma' disabled={chatLoading}
+                style={{ flex: 1, padding: '8px 12px', fontSize: 12, background: 'transparent', border: 'none', outline: 'none', color: 'var(--bt-text)' }} />
+              <button type="button" onClick={toggleMic} style={{ padding: '8px 6px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 14, color: listening ? 'var(--bt-red)' : 'var(--bt-text-dim)' }}>
+                {listening ? '\u23F9' : '\uD83C\uDF99'}
+              </button>
+              <button type="submit" disabled={chatLoading || !chatInput.trim()}
+                style={{ padding: '8px 12px', background: chatInput.trim() ? 'var(--bt-accent)' : 'var(--bt-border)', border: 'none', color: 'var(--bt-black)', fontWeight: 700, fontSize: 13, cursor: chatInput.trim() ? 'pointer' : 'default' }}>
+                &rarr;
+              </button>
+            </form>
+          </div>
+
+          {/* Coach / Scout */}
+          <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <CoachPanel selectedLead={selectedLead} />
+          </div>
+        </div>
+
       </main>
     </div>
   )

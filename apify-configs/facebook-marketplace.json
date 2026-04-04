@@ -1,0 +1,18 @@
+{
+  "_actor": "apify/facebook-marketplace-scraper",
+  "_notes": "Scrapes Facebook Marketplace listings in Orlando area for real estate leads",
+  "searchQuery": "house for sale",
+  "location": "Orlando, Florida",
+  "maxItems": 100,
+  "category": "propertyrentals",
+  "proxy": {
+    "useApifyProxy": true,
+    "apifyProxyGroups": ["RESIDENTIAL"]
+  },
+  "_webhook": {
+    "eventTypes": ["ACTOR.RUN.SUCCEEDED"],
+    "requestUrl": "YOUR_N8N_WEBHOOK_URL",
+    "payloadTemplate": "{\"source\": \"facebook_marketplace\", \"leads\": {{resource.defaultDatasetId}}}"
+  },
+  "_schedule": "Run daily at 6 AM ET — Apify Console → Schedules → New Schedule → Cron: 0 10 * * *"
+}

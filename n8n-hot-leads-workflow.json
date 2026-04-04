@@ -1,0 +1,123 @@
+{
+  "name": "BearTeamOS — Hot Leads Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "apify-leads",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Apify Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract the dataset ID from the Apify webhook payload and fetch the actual data\nconst input = $input.first().json;\nconst body = input.body || input;\nconst source = body.source || 'unknown';\n\n// The webhook payload contains resource.defaultDatasetId\nconst datasetId = body.resource?.defaultDatasetId;\n\nif (datasetId) {\n  // Fetch dataset items from Apify API\n  const apiToken = body.resource?.token || '';\n  const url = `https://api.apify.com/v2/datasets/${datasetId}/items?format=json`;\n  const response = await fetch(url);\n  const leads = await response.json();\n  return [{ json: { source, leads, datasetId } }];\n}\n\n// Fallback: leads sent directly in payload\nlet rawLeads = body.leads || [];\nif (!Array.isArray(rawLeads)) rawLeads = [rawLeads];\nreturn [{ json: { source, leads: rawLeads } }];"
+      },
+      "id": "fetch-dataset",
+      "name": "Fetch Apify Dataset",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize leads from different Apify actor formats into a single schema\nconst input = $input.first().json;\nconst source = input.source || 'unknown';\nlet rawLeads = input.leads || [];\n\nif (!Array.isArray(rawLeads)) rawLeads = [rawLeads];\n\nconst normalized = rawLeads.map(lead => {\n  if (source === 'facebook_marketplace') {\n    return {\n      name: lead.title || lead.name || 'FB Listing',\n      price: lead.price,\n      address: lead.location || lead.address,\n      zip: lead.zipCode || lead.zip,\n      phone: lead.sellerPhone || lead.phone,\n      email: lead.sellerEmail || lead.email,\n      url: lead.url || lead.link,\n      source_id: lead.id || lead.url,\n      description: lead.description,\n      scraped_at: new Date().toISOString(),\n    };\n  }\n\n  if (source === 'craigslist') {\n    return {\n      name: lead.title || 'CL Listing',\n      price: lead.price,\n      address: lead.location || lead.address || lead.neighborhood,\n      zip: lead.zip,\n      phone: lead.phone,\n      email: lead.replyEmail || lead.email,\n      url: lead.url || lead.link,\n      source_id: lead.pid || lead.id || lead.url,\n      description: lead.description || lead.body,\n      scraped_at: new Date().toISOString(),\n    };\n  }\n\n  if (source === 'google_maps') {\n    return {\n      name: lead.title || lead.name,\n      business_name: lead.title || lead.name,\n      phone: lead.phone || lead.phoneNumber,\n      email: lead.email,\n      website: lead.website || lead.url,\n      address: lead.address || lead.street,\n      zip: lead.postalCode || lead.zip,\n      url: lead.url || lead.googleUrl,\n      source_id: lead.placeId || lead.cid || lead.url,\n      description: lead.description || lead.categoryName,\n      rating: lead.totalScore || lead.rating,\n      reviews_count: lead.reviewsCount,\n      scraped_at: new Date().toISOString(),\n    };\n  }\n\n  if (source === 'county_appraisal') {\n    return {\n      name: lead.ownerName || lead.owner || 'Property Owner',\n      owner_name: lead.ownerName || lead.owner,\n      address: lead.propertyAddress || lead.address,\n      zip: lead.zip || lead.zipCode,\n      assessed_value: lead.assessedValue || lead.marketValue,\n      tax_status: lead.taxStatus || (lead.delinquent ? 'delinquent' : 'current'),\n      url: lead.url,\n      source_id: lead.parcelId || lead.folio || lead.id,\n      description: `Assessed: $${lead.assessedValue || 'N/A'} | Tax: ${lead.taxStatus || 'unknown'}`,\n      scraped_at: new Date().toISOString(),\n    };\n  }\n\n  if (source === 'newspaper') {\n    return {\n      name: lead.title || lead.headline || 'News Lead',\n      article_title: lead.title || lead.headline,\n      article_text: lead.text || lead.content || lead.description,\n      url: lead.url || lead.link,\n      source_id: lead.url || lead.id,\n      description: (lead.text || lead.description || '').slice(0, 500),\n      published_at: lead.date || lead.publishedAt,\n      scraped_at: new Date().toISOString(),\n    };\n  }\n\n  return {\n    name: lead.name || lead.title || 'Unknown',\n    phone: lead.phone,\n    email: lead.email,\n    address: lead.address,\n    zip: lead.zip,\n    url: lead.url,\n    source_id: lead.id || lead.url,\n    description: lead.description,\n    scraped_at: new Date().toISOString(),\n  };\n});\n\nreturn [{ json: { source, leads: normalized } }];"
+      },
+      "id": "normalize",
+      "name": "Normalize Leads",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Deduplicate by source_id within this batch\nconst input = $input.first().json;\nconst seen = new Set();\nconst unique = [];\n\nfor (const lead of input.leads) {\n  const key = lead.source_id || `${lead.name}_${lead.address}`;\n  if (!seen.has(key)) {\n    seen.add(key);\n    unique.push(lead);\n  }\n}\n\nreturn [{ json: { source: input.source, leads: unique, deduped: input.leads.length - unique.length } }];"
+      },
+      "id": "dedupe",
+      "name": "Deduplicate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://bearteam-os-dashboard.vercel.app/api/hot-leads-webhook",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer z6GybNfz58PTLJGZ8ZXRCHXejgXPH3wXLCsPOld1d9w="
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($input.first().json) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "send-to-supabase",
+      "name": "Send to BearTeamOS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst source = $('Deduplicate').first().json.source;\nconst total = $('Deduplicate').first().json.leads.length;\nconst deduped = $('Deduplicate').first().json.deduped;\n\nreturn [{\n  json: {\n    status: 'complete',\n    source,\n    total_scraped: total + deduped,\n    duplicates_removed: deduped,\n    sent_to_dashboard: total,\n    inserted: response.inserted || 0,\n    skipped: response.skipped || 0,\n    timestamp: new Date().toISOString(),\n  }\n}];"
+      },
+      "id": "log-results",
+      "name": "Log Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300]
+    }
+  ],
+  "connections": {
+    "Apify Webhook": {
+      "main": [
+        [{ "node": "Fetch Apify Dataset", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Apify Dataset": {
+      "main": [
+        [{ "node": "Normalize Leads", "type": "main", "index": 0 }]
+      ]
+    },
+    "Normalize Leads": {
+      "main": [
+        [{ "node": "Deduplicate", "type": "main", "index": 0 }]
+      ]
+    },
+    "Deduplicate": {
+      "main": [
+        [{ "node": "Send to BearTeamOS", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send to BearTeamOS": {
+      "main": [
+        [{ "node": "Log Results", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    { "name": "hot-leads" },
+    { "name": "apify" },
+    { "name": "automation" }
+  ]
+}

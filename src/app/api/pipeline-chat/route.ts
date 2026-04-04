@@ -16,8 +16,11 @@ const VALID_TYPES = ['buyer', 'seller', 'rental']
 
 export async function POST(req: Request) {
   try {
-    const { messages, agentId } = await req.json()
-    if (!agentId || !messages?.length) {
+    const body = await req.json()
+    const agentId = body.agentId
+    // Support both { message: "..." } and { messages: [...] } formats
+    const lastMessage = body.message || (body.messages?.length ? body.messages[body.messages.length - 1]?.content : null)
+    if (!agentId || !lastMessage) {
       return NextResponse.json({ error: 'missing_params' }, { status: 400 })
     }
 
@@ -33,8 +36,6 @@ export async function POST(req: Request) {
           `- ${l.lead_name} [${l.stage}${l.lead_type ? `, ${l.lead_type}` : ''}] id:${l.id}`
         ).join('\n')
       : 'None yet.'
-
-    const lastMessage = messages[messages.length - 1]?.content ?? ''
 
     const oaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',

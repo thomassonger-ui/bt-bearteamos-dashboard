@@ -61,6 +61,58 @@ export interface Pipeline {
   scout_last_interaction?: string
   engagement_score?: number
   last_engagement_update?: string
+  brokerage?: string
+  enrichment_status?: 'complete' | 'failed' | 'pending' | null
+  // Hot lead fields
+  lead_source?: LeadSource
+  hot_lead_type?: HotLeadType
+  urgency?: 'critical' | 'high' | 'normal' | 'low'
+  arv?: number
+  property_address?: string
+  zip_code?: string
+  pain_point?: string
+  source_url?: string
+  source_id?: string
+  scraped_at?: string
+  is_hot_lead?: boolean
+}
+
+export type LeadSource =
+  | 'facebook_marketplace'
+  | 'craigslist'
+  | 'google_maps'
+  | 'county_appraisal'
+  | 'newspaper'
+
+export type HotLeadType =
+  | 'probate'
+  | 'pre_foreclosure'
+  | 'tax_delinquent'
+  | 'expired_listing'
+  | 'fsbo'
+  | 'code_violation'
+  | 'hoa_lien'
+  | 'divorce'
+  | 'obituary'
+  | 'str_distress'
+  | 'eviction'
+  | 'arm_reset'
+  | 'downsizer'
+  | 'job_relocation'
+  | 'flip_failure'
+
+export interface HotLeadSource {
+  id: string
+  source_name: LeadSource
+  apify_actor_id?: string
+  is_active: boolean
+  last_run_at?: string
+  last_run_status?: string
+  leads_found: number
+  run_frequency: string
+  config?: Record<string, unknown>
+  created_at: string
+  updated_at: string
 }
 
 export interface ComplianceRecord {
