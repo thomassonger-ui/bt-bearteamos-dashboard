@@ -158,6 +158,21 @@ export default function BrokerPage() {
           )}
           <RecruitPipeline
             leads={recruitLeads}
+            onRefresh={async () => setRecruitLeads(await getRecruitLeads())}
+            onAddRecruit={async (data) => {
+              const { getSupabase } = await import('@/lib/supabase')
+              await getSupabase().from('leads').insert({
+                name: data.name,
+                email: data.email || null,
+                phone: data.phone || null,
+                brokerage: data.brokerage || null,
+                deal_count: data.deal_count ? parseInt(data.deal_count) : null,
+                source: data.source || 'manual',
+                status: 'new_lead',
+                stage: 'new_lead',
+              })
+              setRecruitLeads(await getRecruitLeads())
+            }}
             onStageChange={async (leadId, stage) => {
               await updateRecruitStage(leadId, stage)
               setRecruitLeads(await getRecruitLeads())

@@ -20,15 +20,93 @@ interface Props {
   onStageChange: (leadId: string, stage: string) => Promise<void>
   onConvert: (leadId: string) => void
   onDraftOutreach: (lead: RecruitLead) => void
+  onRefresh?: () => void
+  onAddRecruit?: (data: Record<string, string>) => Promise<void>
 }
 
 function daysSince(iso: string) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24))
 }
 
-export default function RecruitPipeline({ leads, onStageChange, onConvert, onDraftOutreach }: Props) {
+export default function RecruitPipeline({ leads, onStageChange, onConvert, onDraftOutreach, onRefresh, onAddRecruit }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
+  const [showAdd, setShowAdd] = useState(false)
+  const [showImport, setShowImport] = useState(false)
+  const [addName, setAddName] = useState('')
+  const [addEmail, setAddEmail] = useState('')
+  const [addPhone, setAddPhone] = useState('')
+  const [addBrokerage, setAddBrokerage] = useState('')
+  const [addDeals, setAddDeals] = useState('')
+  const [addSaving, setAddSaving] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importResult, setImportResult] = useState<string | null>(null)
+
+  function exportCSV() {
+    const headers = ['name', 'email', 'phone', 'brokerage', 'deal_count', 'stage', 'source', 'notes', 'created_at']
+    const rows = leads.map(l => [
+      l.name, l.email || '', l.phone || '', l.brokerage || '',
+      l.deal_count ?? '', l.stage || l.status || '', l.source || '',
+      l.notes || '', l.created_at ? new Date(l.created_at).toLocaleDateString() : '',
+    ])
+    const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))].join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `BearTeam_Recruit_Pipeline_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImporting(true)
+    setImportResult(null)
+    try {
+      const text = await file.text()
+      const lines = text.split('\n').filter(l => l.trim())
+      if (lines.length < 2) { setImportResult('CSV is empty.'); setImporting(false); return }
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, '').toLowerCase())
+      let added = 0
+      for (let i = 1; i < lines.length; i++) {
+        const vals = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''))
+        const get = (keys: string[]) => { for (const k of keys) { const idx = headers.indexOf(k); if (idx >= 0 && vals[idx]) return vals[idx] } return '' }
+        const name = get(['name', 'agent_name', 'agent', 'full_name'])
+        if (!name) continue
+        await onAddRecruit?.({
+          name,
+          email: get(['email', 'e-mail']),
+          phone: get(['phone', 'cell', 'mobile']),
+          brokerage: get(['brokerage', 'company', 'broker']),
+          deal_count: get(['deal_count', 'deals', 'transactions']),
+          source: 'csv_import',
+        })
+        added++
+      }
+      setImportResult(`Imported ${added} recruit${added !== 1 ? 's' : ''}.`)
+      onRefresh?.()
+    } catch { setImportResult('Error reading file.') }
+    finally { setImporting(false); e.target.value = '' }
+  }
+
+  async function handleAdd() {
+    if (!addName.trim() || addSaving) return
+    setAddSaving(true)
+    await onAddRecruit?.({
+      name: addName.trim(),
+      email: addEmail.trim(),
+      phone: addPhone.trim(),
+      brokerage: addBrokerage.trim(),
+      deal_count: addDeals.trim(),
+      source: 'manual',
+    })
+    setAddName(''); setAddEmail(''); setAddPhone(''); setAddBrokerage(''); setAddDeals('')
+    setShowAdd(false)
+    setAddSaving(false)
+    onRefresh?.()
+  }
 
   const filtered = search.trim()
     ? leads.filter(l => l.name.toLowerCase().includes(search.toLowerCase()) || (l.email && l.email.toLowerCase().includes(search.toLowerCase())))
@@ -51,6 +129,83 @@ export default function RecruitPipeline({ leads, onStageChange, onConvert, onDra
 
   return (
     <div>
+      {/* Toolbar */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <button onClick={() => { setShowAdd(v => !v); setShowImport(false) }} style={{
+          fontSize: 11, padding: '6px 14px', fontWeight: 600,
+          background: showAdd ? '#4CAF50' : 'var(--bt-surface)', border: '1px solid var(--bt-border)',
+          color: showAdd ? '#fff' : 'var(--bt-text-dim)', borderRadius: 4, cursor: 'pointer',
+        }}>+ Add Recruit</button>
+        <button onClick={() => { setShowImport(v => !v); setShowAdd(false) }} style={{
+          fontSize: 11, padding: '6px 14px', fontWeight: 600,
+          background: showImport ? '#1976D2' : 'var(--bt-surface)', border: '1px solid var(--bt-border)',
+          color: showImport ? '#fff' : 'var(--bt-text-dim)', borderRadius: 4, cursor: 'pointer',
+        }}>Import CSV</button>
+        <button onClick={exportCSV} style={{
+          fontSize: 11, padding: '6px 14px', fontWeight: 600,
+          background: 'var(--bt-surface)', border: '1px solid var(--bt-border)',
+          color: 'var(--bt-text-dim)', borderRadius: 4, cursor: 'pointer',
+        }}>Export CSV</button>
+      </div>
+
+      {/* Add Recruit Form */}
+      {showAdd && (
+        <div style={{ marginBottom: 12, padding: '14px', background: 'rgba(76,175,80,0.06)', border: '1px solid rgba(76,175,80,0.2)', borderRadius: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10 }}>Add Recruit</div>
+          <div className="m-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr auto', gap: 8, alignItems: 'end' }}>
+            <div>
+              <div style={{ fontSize: 9, color: 'var(--bt-text-dim)', textTransform: 'uppercase', marginBottom: 3 }}>Name *</div>
+              <input value={addName} onChange={e => setAddName(e.target.value)} placeholder="Jane Smith" style={inpSt} />
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: 'var(--bt-text-dim)', textTransform: 'uppercase', marginBottom: 3 }}>Email</div>
+              <input value={addEmail} onChange={e => setAddEmail(e.target.value)} placeholder="jane@example.com" style={inpSt} />
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: 'var(--bt-text-dim)', textTransform: 'uppercase', marginBottom: 3 }}>Phone</div>
+              <input value={addPhone} onChange={e => setAddPhone(e.target.value)} placeholder="407-555-1234" style={inpSt} />
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: 'var(--bt-text-dim)', textTransform: 'uppercase', marginBottom: 3 }}>Brokerage</div>
+              <input value={addBrokerage} onChange={e => setAddBrokerage(e.target.value)} placeholder="Keller Williams" style={inpSt} />
+            </div>
+            <div>
+              <div style={{ fontSize: 9, color: 'var(--bt-text-dim)', textTransform: 'uppercase', marginBottom: 3 }}>Deals/yr</div>
+              <input value={addDeals} onChange={e => setAddDeals(e.target.value)} placeholder="8" style={inpSt} />
+            </div>
+            <button onClick={handleAdd} disabled={!addName.trim() || addSaving} style={{
+              padding: '8px 16px', fontSize: 11, fontWeight: 700,
+              background: addName.trim() ? '#4CAF50' : 'var(--bt-border)',
+              color: '#fff', border: 'none', borderRadius: 4, cursor: addName.trim() ? 'pointer' : 'default',
+            }}>{addSaving ? '...' : 'Add'}</button>
+          </div>
+        </div>
+      )}
+
+      {/* Import Panel */}
+      {showImport && (
+        <div style={{ marginBottom: 12, padding: '14px', background: 'rgba(25,118,210,0.06)', border: '1px solid rgba(25,118,210,0.2)', borderRadius: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>Import Recruits from CSV</div>
+          <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', lineHeight: 1.6, marginBottom: 8 }}>
+            <strong>Required:</strong> <code>name</code><br />
+            <strong>Optional:</strong> <code>email</code>, <code>phone</code>, <code>brokerage</code>, <code>deal_count</code>
+          </div>
+          <pre style={{ fontSize: 10, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 4, padding: '8px', marginBottom: 8, overflowX: 'auto' }}>
+{`name,email,phone,brokerage,deal_count
+Jane Smith,jane@example.com,407-555-1234,Keller Williams,12
+Sarah Kim,sarah@example.com,321-555-5678,eXp Realty,8`}
+          </pre>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <label style={{ fontSize: 11, padding: '6px 14px', fontWeight: 600, background: '#1976D2', color: '#fff', borderRadius: 4, cursor: 'pointer' }}>
+              Choose CSV File
+              <input type="file" accept=".csv" onChange={handleImport} style={{ display: 'none' }} />
+            </label>
+            {importing && <span style={{ fontSize: 11, color: 'var(--bt-text-dim)' }}>Importing...</span>}
+            {importResult && <span style={{ fontSize: 11, color: importResult.includes('Error') ? '#E04E4E' : '#4CAF50' }}>{importResult}</span>}
+          </div>
+        </div>
+      )}
+
       {/* Stats bar */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 16 }}>
         {[
@@ -214,4 +369,10 @@ export default function RecruitPipeline({ leads, onStageChange, onConvert, onDra
       )}
     </div>
   )
+}
+
+const inpSt: React.CSSProperties = {
+  width: '100%', padding: '7px 10px', fontSize: 12,
+  background: 'var(--bt-surface)', border: '1px solid var(--bt-border)',
+  color: 'var(--bt-text)', borderRadius: 4, outline: 'none', fontFamily: 'inherit',
 }
