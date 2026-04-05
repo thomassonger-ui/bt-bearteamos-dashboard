@@ -290,8 +290,8 @@ export default function DashboardPage() {
           <DailySummaryCard agent={agent} tasks={tasks} compliance={compliance} />
 
           {/* Daily Direction */}
-          <div style={{ marginTop: 20 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+          <div style={{ marginTop: 20, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--bt-border)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--bt-text-dim)' }}>Daily Direction</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 10, color: 'var(--bt-text-dim)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Listings Week</span>
@@ -300,13 +300,15 @@ export default function DashboardPage() {
                 </a>
               </div>
             </div>
-            <div style={{ fontSize: 13, color: 'var(--bt-text)', lineHeight: 1.6, marginBottom: 8 }}>
-              Reset today. Focus on calls first&mdash;everything else second. You should be at 10 calls by now. {agent.name.split(' ')[0]}, call those {pendingTasks.length > 0 ? 1 : 0} leads today.
+            <div style={{ padding: '14px 16px', maxHeight: 180, overflowY: 'auto' }}>
+              <div style={{ fontSize: 13, color: 'var(--bt-text)', lineHeight: 1.6, marginBottom: 8 }}>
+                Reset today. Focus on calls first&mdash;everything else second. You should be at 10 calls by now. {agent.name.split(' ')[0]}, call those {pendingTasks.length > 0 ? 1 : 0} leads today.
+              </div>
+              <ul style={{ fontSize: 12, color: 'var(--bt-text)', lineHeight: 1.8, paddingLeft: 16, margin: 0 }}>
+                <li>Book at least one appointment today.</li>
+                <li>You need 20 calls today to stay on track.</li>
+              </ul>
             </div>
-            <ul style={{ fontSize: 12, color: 'var(--bt-text)', lineHeight: 1.8, paddingLeft: 16, margin: 0 }}>
-              <li>Book at least one appointment today.</li>
-              <li>You need 20 calls today to stay on track.</li>
-            </ul>
           </div>
 
           {/* Task List */}
