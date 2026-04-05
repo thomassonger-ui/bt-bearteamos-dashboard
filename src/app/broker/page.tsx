@@ -133,7 +133,7 @@ export default function BrokerPage() {
           { key: 'agents' as const, label: 'Agents & Performance' },
           { key: 'commissions' as const, label: 'Commissions & Revenue' },
           { key: 'recruiting' as const, label: 'Recruiting' },
-          { key: 'performance' as const, label: 'Recruiter/Trainer' },
+          ...(['tom', 'beth'].includes(typeof window !== 'undefined' ? (sessionStorage.getItem('bt_username') ?? '') : '') ? [{ key: 'performance' as const, label: 'Recruiter/Trainer' }] : []),
         ]).map(tab => (
           <button key={tab.key} onClick={() => setBrokerTab(tab.key)} style={{
             padding: '10px 20px', fontSize: 11, fontWeight: brokerTab === tab.key ? 700 : 400,
