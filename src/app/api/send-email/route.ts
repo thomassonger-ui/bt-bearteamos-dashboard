@@ -5,7 +5,7 @@ import sgMail from "@sendgrid/mail"
 
 export async function POST(req: Request) {
   try {
-    const { to, subject, body, fromName, sendAt } = await req.json()
+    const { to, subject, body, fromName, replyTo, sendAt } = await req.json()
 
     if (!to || !subject || !body) {
       return NextResponse.json({ error: "missing_fields" }, { status: 400 })
@@ -27,7 +27,7 @@ export async function POST(req: Request) {
 
     const senderName = fromName || "Tom Songer"
 
-    console.log(`[send-email] sending to: ${to} from: ${senderEmail}`)
+    console.log(`[send-email] sending to: ${to} from: ${senderEmail} replyTo: ${replyTo ?? "none"}`)
 
     const msg: sgMail.MailDataRequired = {
       to,
@@ -35,6 +35,7 @@ export async function POST(req: Request) {
       subject,
       text: body,
       html: `<p>${body.replace(/\n/g, "<br/>")}</p>`,
+      ...(replyTo ? { replyTo } : {}),
       ...(sendAt ? { sendAt: Math.floor(new Date(sendAt).getTime() / 1000) } : {}),
     }
 
