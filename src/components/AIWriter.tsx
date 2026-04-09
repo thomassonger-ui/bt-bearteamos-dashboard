@@ -8,7 +8,7 @@ interface AIWriterProps {
 }
 
 const QUICK_PROMPTS = [
-  { label: 'First touch \u2013 new buyer lead', prompt: 'Write a short, warm first-touch email to a new buyer lead I just added to my pipeline. They\'re looking in Orlando.' },
+  { label: 'First touch – new buyer lead', prompt: 'Write a short, warm first-touch email to a new buyer lead I just added to my pipeline. They\'re looking in Orlando.' },
   { label: 'Follow-up after no response', prompt: 'Write a brief follow-up email to a seller lead who hasn\'t responded to my last message. Keep it casual, not pushy.' },
   { label: 'Listing presentation invite', prompt: 'Write an email inviting a seller lead to a listing presentation. Highlight Bear Team\'s marketing and local Orlando expertise.' },
   { label: 'Price reduction conversation', prompt: 'Write a gentle email to a seller client suggesting we discuss a price reduction to attract more buyers.' },
@@ -32,7 +32,7 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [agentName, setAgentName] = useState('Tom Songer')
   const [agentPhone, setAgentPhone] = useState('407-758-8102')
-  const [agentEmail, setAgentEmail] = useState('thomas.songer@gmail.com')
+  const [agentEmail, setAgentEmail] = useState('')
 
   useEffect(() => {
     const id = sessionStorage.getItem('bt_agent_id')
@@ -78,7 +78,7 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
         body: JSON.stringify({ prompt: fullPrompt, agentName, agentPhone, agentEmail, clientName: clientName.trim() || undefined }),
       })
       const data = await res.json()
-      let reply = data.reply ?? 'Something went wrong \u2013 try again.'
+      let reply = data.reply ?? 'Something went wrong – try again.'
       if (clientName.trim()) {
         reply = reply.replace(/\[CLIENT NAME\]/gi, clientName.trim())
         reply = reply.replace(/\[CLIENT'S NAME\]/gi, clientName.trim())
@@ -126,7 +126,7 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
         subject,
         body: emailBody,
         fromName: agentName,
-        fromEmail: agentEmail,
+        ...(agentEmail ? { replyTo: agentEmail } : {}),
       }
       if (scheduleMode && scheduleAt) {
         payload.sendAt = new Date(scheduleAt).toISOString()
@@ -172,7 +172,9 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
               <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--bt-accent)' }} />
               <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>AI Writer</span>
             </div>
-            <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginTop: 2, marginLeft: 15 }}>Draft emails, scripts &amp; messages</div>
+            <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginTop: 2, marginLeft: 15 }}>
+              {agentEmail ? `Replies → ${agentEmail}` : 'Draft emails, scripts & messages'}
+            </div>
           </div>
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--bt-text-dim)', fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}>&#x2715;</button>
         </div>
@@ -210,7 +212,7 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
               {loading ? '\u23F3' : '\u2728'}
             </button>
           </div>
-          <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', marginTop: 4 }}>\u2318 + Enter to generate</div>
+          <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', marginTop: 4 }}>⌘ + Enter to generate</div>
         </form>
 
         {/* Output area */}
