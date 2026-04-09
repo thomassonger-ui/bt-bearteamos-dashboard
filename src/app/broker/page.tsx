@@ -201,6 +201,11 @@ export default function BrokerPage() {
               } catch { setConvertResult('Error converting recruit.') }
               finally { setConvertingId(null) }
             }}
+            onDelete={async (leadId) => {
+              const { getSupabase } = await import('@/lib/supabase')
+              await getSupabase().from('leads').delete().eq('id', leadId)
+              setRecruitLeads(await getRecruitLeads())
+            }}
             onDraftOutreach={(lead) => {
               // Store lead info for AI Writer
               sessionStorage.setItem('bt_selected_lead', JSON.stringify({
