@@ -161,6 +161,20 @@ export interface RecruitLead {
   updated_at?: string
 }
 
+// ─── Campaign Pipeline Lead ───────────────────────────────────────────────────
+
+export interface Lead {
+  id: string
+  name: string
+  email: string
+  brokerage?: string
+  batchId: string
+  status: 'new' | 'contacted' | 'paused' | 'unsubscribed'
+  currentStep: number
+  lastContactedAt: string | null
+  createdAt: string
+}
+
 // ─── UI helpers ──────────────────────────────────────────────────────────────
 
 export type TaskStatus = Task['status']
