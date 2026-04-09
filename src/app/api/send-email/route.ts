@@ -19,9 +19,13 @@ export async function POST(req: Request) {
 
     sgMail.setApiKey(apiKey)
 
-    // Must match verified sender in SendGrid Sender Authentication
-    const senderEmail = fromEmail || process.env.SENDGRID_FROM_EMAIL || "tom@bearteam.com"
+    const senderEmail = fromEmail || process.env.SENDGRID_FROM_EMAIL
     const senderName = fromName || "Tom Songer"
+
+    if (!senderEmail) {
+      console.error("[send-email] SENDGRID_FROM_EMAIL is not set")
+      return NextResponse.json({ error: "server_misconfiguration" }, { status: 500 })
+    }
 
     const msg: sgMail.MailDataRequired = {
       to,
