@@ -1,6 +1,12 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 interface AIWriterProps {
   open: boolean
@@ -34,18 +40,31 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
   const [agentPhone, setAgentPhone] = useState('407-758-8102')
   const [agentEmail, setAgentEmail] = useState('')
 
+  // Pull agent identity from Supabase session first, fall back to sessionStorage
   useEffect(() => {
-    const id = sessionStorage.getItem('bt_agent_id')
-    if (id) {
-      fetch(`/api/auth?agentId=${encodeURIComponent(id)}`)
-        .then(r => r.json())
-        .then(data => {
-          if (data.name) setAgentName(data.name)
-          if (data.phone) setAgentPhone(data.phone)
-          if (data.email) setAgentEmail(data.email)
-        })
-        .catch(() => {})
+    async function loadAgent() {
+      // Try Supabase session
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user?.email) {
+        setAgentEmail(user.email)
+        if (user.user_metadata?.name) setAgentName(user.user_metadata.name)
+        if (user.user_metadata?.phone) setAgentPhone(user.user_metadata.phone)
+        return
+      }
+      // Fall back to sessionStorage / legacy API
+      const id = sessionStorage.getItem('bt_agent_id')
+      if (id) {
+        fetch(`/api/auth?agentId=${encodeURIComponent(id)}`)
+          .then(r => r.json())
+          .then(data => {
+            if (data.name) setAgentName(data.name)
+            if (data.phone) setAgentPhone(data.phone)
+            if (data.email) setAgentEmail(data.email)
+          })
+          .catch(() => {})
+      }
     }
+    loadAgent()
   }, [])
 
   useEffect(() => {
@@ -64,14 +83,9 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
 
   async function generate(prompt: string) {
     if (!prompt.trim() || loading) return
-    setLoading(true)
-    setOutput('')
-    setCopied(false)
-    setSendStatus(null)
+    setLoading(true); setOutput(''); setCopied(false); setSendStatus(null)
     try {
-      const fullPrompt = clientName.trim()
-        ? `${prompt}\n\nThe client's name is ${clientName.trim()}.`
-        : prompt
+      const fullPrompt = clientName.trim() ? `${prompt}\n\nThe client's name is ${clientName.trim()}.` : prompt
       const res = await fetch('/api/ai-writer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -85,38 +99,22 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
         reply = reply.replace(/\[Client Name\]/gi, clientName.trim())
       }
       setOutput(reply)
-    } catch {
-      setOutput('Error connecting to AI. Please try again.')
-    } finally {
-      setLoading(false)
-    }
+    } catch { setOutput('Error connecting to AI. Please try again.') }
+    finally { setLoading(false) }
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    generate(input)
-  }
+  function handleSubmit(e: React.FormEvent) { e.preventDefault(); generate(input) }
 
   function copyOutput() {
-    navigator.clipboard.writeText(output).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
+    navigator.clipboard.writeText(output).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) })
   }
 
-  function usePrompt(prompt: string) {
-    setInput(prompt)
-    generate(prompt)
-  }
+  function usePrompt(prompt: string) { setInput(prompt); generate(prompt) }
 
   async function handleSend() {
     if (!recipientEmail.trim() || sending) return
-    if (scheduleMode && !scheduleAt) {
-      setSendStatus('Pick a time')
-      return
-    }
-    setSending(true)
-    setSendStatus(null)
+    if (scheduleMode && !scheduleAt) { setSendStatus('Pick a time'); return }
+    setSending(true); setSendStatus(null)
     try {
       const subjectMatch = output.match(/^Subject:\s*(.+)/m)
       const subject = subjectMatch ? subjectMatch[1].trim() : 'Bear Team Real Estate'
@@ -128,9 +126,7 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
         fromName: agentName,
         ...(agentEmail ? { replyTo: agentEmail } : {}),
       }
-      if (scheduleMode && scheduleAt) {
-        payload.sendAt = new Date(scheduleAt).toISOString()
-      }
+      if (scheduleMode && scheduleAt) payload.sendAt = new Date(scheduleAt).toISOString()
       const res = await fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -138,34 +134,21 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
       })
       if (res.ok) {
         setSendStatus(scheduleMode ? 'Scheduled!' : 'Sent!')
-        setScheduleMode(false)
-        setScheduleAt('')
+        setScheduleMode(false); setScheduleAt('')
         setTimeout(() => setSendStatus(null), 3000)
-      } else {
-        setSendStatus('Failed')
-      }
-    } catch {
-      setSendStatus('Error')
-    } finally {
-      setSending(false)
-    }
+      } else { setSendStatus('Failed') }
+    } catch { setSendStatus('Error') }
+    finally { setSending(false) }
   }
 
   if (!open) return null
-
   const minDateTime = new Date(Date.now() + 10 * 60 * 1000).toISOString().slice(0, 16)
 
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 200 }} />
-      <div style={{
-        position: 'fixed', top: 0, right: 0, bottom: 0, width: 420,
-        background: '#0d1825', borderLeft: '1px solid var(--bt-border)',
-        zIndex: 201, display: 'flex', flexDirection: 'column',
-        boxShadow: '-8px 0 32px rgba(0,0,0,0.4)',
-      }}>
+      <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: 420, background: '#0d1825', borderLeft: '1px solid var(--bt-border)', zIndex: 201, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.4)' }}>
 
-        {/* Header */}
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--bt-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -179,7 +162,6 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
           <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--bt-text-dim)', fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}>&#x2715;</button>
         </div>
 
-        {/* Quick prompts */}
         <div style={{ padding: '14px 20px 0', flexShrink: 0 }}>
           <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8, fontWeight: 600 }}>Quick Templates</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -192,14 +174,12 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
           </div>
         </div>
 
-        {/* Client name */}
         <div style={{ padding: '10px 20px 0', flexShrink: 0 }}>
           <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4, fontWeight: 600 }}>Client Name</div>
           <input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="e.g. Sarah Mitchell"
             style={{ width: '100%', padding: '8px 12px', fontSize: 12, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', color: 'var(--bt-text)', borderRadius: 5, outline: 'none', fontFamily: 'inherit' }} />
         </div>
 
-        {/* Custom prompt */}
         <form onSubmit={handleSubmit} style={{ padding: '10px 20px 0', flexShrink: 0 }}>
           <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, fontWeight: 600 }}>Custom Prompt</div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -215,10 +195,8 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
           <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', marginTop: 4 }}>⌘ + Enter to generate</div>
         </form>
 
-        {/* Output area */}
         <div style={{ flex: 1, padding: '14px 20px', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
           <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 8, flexShrink: 0 }}>Output</div>
-
           {loading ? (
             <div style={{ flex: 1, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 5, padding: '12px 14px', fontSize: 13, color: 'var(--bt-text-dim)', fontStyle: 'italic', minHeight: 120 }}>Writing...</div>
           ) : output ? (
@@ -228,62 +206,27 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
             <div style={{ flex: 1, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 5, padding: '12px 14px', fontSize: 13, color: 'var(--bt-text-dim)', fontStyle: 'italic', minHeight: 120 }}>Your email will appear here</div>
           )}
 
-          {/* Send bar */}
           {output && (
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <input value={recipientEmail} onChange={e => setRecipientEmail(e.target.value)} placeholder="client@email.com"
                   style={{ flex: 1, padding: '8px 10px', fontSize: 12, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', color: 'var(--bt-text)', borderRadius: 4, outline: 'none', fontFamily: 'inherit' }} />
-
-                {/* Schedule toggle */}
-                <button
-                  onClick={() => { setScheduleMode(!scheduleMode); setScheduleAt('') }}
-                  title="Schedule for later"
-                  style={{
-                    fontSize: 14, padding: '8px 10px',
-                    background: scheduleMode ? 'var(--bt-accent)' : 'var(--bt-surface)',
-                    border: '1px solid var(--bt-border)',
-                    color: scheduleMode ? 'var(--bt-black)' : 'var(--bt-text-dim)',
-                    borderRadius: 4, cursor: 'pointer',
-                  }}>&#x1F550;</button>
-
-                {/* Send / Schedule button */}
+                <button onClick={() => { setScheduleMode(!scheduleMode); setScheduleAt('') }} title="Schedule for later"
+                  style={{ fontSize: 14, padding: '8px 10px', background: scheduleMode ? 'var(--bt-accent)' : 'var(--bt-surface)', border: '1px solid var(--bt-border)', color: scheduleMode ? 'var(--bt-black)' : 'var(--bt-text-dim)', borderRadius: 4, cursor: 'pointer' }}>&#x1F550;</button>
                 <button onClick={handleSend} disabled={!recipientEmail.trim() || sending}
-                  style={{
-                    fontSize: 12, padding: '8px 14px', fontWeight: 700,
-                    background: !recipientEmail.trim() || sending
-                      ? 'var(--bt-border)'
-                      : sendStatus === 'Sent!' || sendStatus === 'Scheduled!' ? '#2ecc71'
-                      : sendStatus === 'Failed' || sendStatus === 'Error' ? '#e74c3c'
-                      : '#E04E4E',
-                    border: 'none', color: '#fff', borderRadius: 4,
-                    cursor: recipientEmail.trim() ? 'pointer' : 'default', whiteSpace: 'nowrap',
-                  }}>
+                  style={{ fontSize: 12, padding: '8px 14px', fontWeight: 700, background: !recipientEmail.trim() || sending ? 'var(--bt-border)' : sendStatus === 'Sent!' || sendStatus === 'Scheduled!' ? '#2ecc71' : sendStatus === 'Failed' || sendStatus === 'Error' ? '#e74c3c' : '#E04E4E', border: 'none', color: '#fff', borderRadius: 4, cursor: recipientEmail.trim() ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
                   {sending ? '...' : sendStatus || (scheduleMode ? 'Schedule' : 'Send')}
                 </button>
-
                 <button onClick={copyOutput}
                   style={{ fontSize: 12, padding: '8px 12px', background: copied ? 'var(--bt-accent)' : 'var(--bt-surface)', border: '1px solid var(--bt-border)', color: copied ? 'var(--bt-black)' : 'var(--bt-text-dim)', borderRadius: 4, cursor: 'pointer', fontWeight: copied ? 700 : 400 }}>
                   {copied ? 'Copied' : 'Copy'}
                 </button>
               </div>
-
-              {/* DateTime picker */}
               {scheduleMode && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, whiteSpace: 'nowrap' }}>Send at</div>
-                  <input
-                    type="datetime-local"
-                    value={scheduleAt}
-                    min={minDateTime}
-                    onChange={e => setScheduleAt(e.target.value)}
-                    style={{
-                      flex: 1, padding: '7px 10px', fontSize: 12,
-                      background: 'var(--bt-surface)', border: '1px solid var(--bt-border)',
-                      color: 'var(--bt-text)', borderRadius: 4, outline: 'none',
-                      fontFamily: 'inherit', colorScheme: 'dark',
-                    }}
-                  />
+                  <input type="datetime-local" value={scheduleAt} min={minDateTime} onChange={e => setScheduleAt(e.target.value)}
+                    style={{ flex: 1, padding: '7px 10px', fontSize: 12, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', color: 'var(--bt-text)', borderRadius: 4, outline: 'none', fontFamily: 'inherit', colorScheme: 'dark' }} />
                 </div>
               )}
             </div>
