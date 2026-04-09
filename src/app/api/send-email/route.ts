@@ -19,8 +19,8 @@ export async function POST(req: Request) {
 
     sgMail.setApiKey(apiKey)
 
+    const senderEmail = fromEmail || process.env.SENDGRID_FROM_EMAIL || "tom@bearteamrealestate.com"
     const senderName = fromName || "Tom Songer"
-    const senderEmail = fromEmail || "tom@bearteamrealestate.com"
 
     const msg: sgMail.MailDataRequired = {
       to,
@@ -31,11 +31,17 @@ export async function POST(req: Request) {
       ...(sendAt ? { sendAt: Math.floor(new Date(sendAt).getTime() / 1000) } : {}),
     }
 
+    console.log("[send-email] sending to:", to, "from:", senderEmail)
+
     await sgMail.send(msg)
 
     return NextResponse.json({ success: true })
-  } catch (err) {
-    console.error("[send-email] error:", err)
-    return NextResponse.json({ error: "send_failed" }, { status: 500 })
+  } catch (err: unknown) {
+    const sgError = err as { response?: { body?: unknown }; message?: string }
+    console.error("[send-email] SendGrid error:", sgError?.response?.body ?? sgError?.message ?? err)
+    return NextResponse.json({
+      error: "send_failed",
+      detail: sgError?.response?.body ?? sgError?.message ?? "unknown error"
+    }, { status: 500 })
   }
 }
