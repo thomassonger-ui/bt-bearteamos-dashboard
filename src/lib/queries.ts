@@ -500,3 +500,95 @@ export async function updateHotLeadSourceStatus(
     .eq('source_name', sourceName)
   if (error) console.error('updateHotLeadSourceStatus:', error.message)
 }
+
+// ─── CAMPAIGN PIPELINE QUERIES ───────────────────────────────────────────────
+// Used by /api/leads/upload and /api/campaigns/send-step
+
+import type { Lead } from "@/types"
+
+export async function insertBatch(
+  batchId: string,
+  totalRows: number,
+  skipped: unknown[]
+): Promise<void> {
+  const supabase = getSupabase()
+  const { error } = await supabase
+    .from("campaign_batches")
+    .insert({ batch_id: batchId, total_rows: totalRows, skipped })
+  if (error) throw new Error(error.message)
+}
+
+export async function insertLeads(leads: Lead[]): Promise<void> {
+  if (leads.length === 0) return
+  const supabase = getSupabase()
+  const rows = leads.map((l) => ({
+    id: l.id,
+    batch_id: l.batchId,
+    name: l.name,
+    email: l.email,
+    brokerage: l.brokerage ?? null,
+    status: l.status,
+    current_step: l.currentStep,
+    last_contacted_at: l.lastContactedAt,
+    created_at: l.createdAt,
+  }))
+  const { error } = await supabase
+    .from("campaign_leads")
+    .upsert(rows, { onConflict: "email,batch_id", ignoreDuplicates: true })
+  if (error) throw new Error(error.message)
+}
+
+export async function getEligibleLeads(
+  batchId: string,
+  step: number
+): Promise<Lead[]> {
+  const supabase = getSupabase()
+  const { data, error } = await supabase
+    .from("campaign_leads")
+    .select("*")
+    .eq("batch_id", batchId)
+    .eq("current_step", step - 1)
+    .neq("status", "paused")
+    .neq("status", "unsubscribed")
+  if (error) throw new Error(error.message)
+  return (data ?? []).map(rowToLead)
+}
+
+export async function updateLeadAfterSend(
+  id: string,
+  step: number,
+  sentAt: string
+): Promise<void> {
+  const supabase = getSupabase()
+  const { error } = await supabase
+    .from("campaign_leads")
+    .update({ current_step: step, last_contacted_at: sentAt, status: "contacted" })
+    .eq("id", id)
+  if (error) throw new Error(error.message)
+}
+
+export async function updateLeadStatus(
+  id: string,
+  status: Lead["status"]
+): Promise<void> {
+  const supabase = getSupabase()
+  const { error } = await supabase
+    .from("campaign_leads")
+    .update({ status })
+    .eq("id", id)
+  if (error) throw new Error(error.message)
+}
+
+function rowToLead(row: Record<string, unknown>): Lead {
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    email: row.email as string,
+    brokerage: (row.brokerage as string) ?? undefined,
+    batchId: row.batch_id as string,
+    status: row.status as Lead["status"],
+    currentStep: row.current_step as number,
+    lastContactedAt: (row.last_contacted_at as string) ?? null,
+    createdAt: row.created_at as string,
+  }
+}
