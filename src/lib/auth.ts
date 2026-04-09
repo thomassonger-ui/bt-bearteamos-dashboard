@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 
 export function requireAuth(req: NextRequest): NextResponse | null {
-  const token = process.env.INTERNAL_API_TOKEN
+  const token = process.env.INTERNAL_API_KEY
   if (!token) {
-    console.error("[auth] INTERNAL_API_TOKEN is not configured")
+    console.error("[auth] INTERNAL_API_KEY is not configured")
     return NextResponse.json({ success: false, error: "Server misconfiguration." }, { status: 500 })
   }
   const header = req.headers.get("authorization") ?? ""
