@@ -5,7 +5,7 @@ import sgMail from "@sendgrid/mail"
 
 export async function POST(req: Request) {
   try {
-    const { to, subject, body, fromName, fromEmail, sendAt } = await req.json()
+    const { to, subject, body, fromName, sendAt } = await req.json()
 
     if (!to || !subject || !body) {
       return NextResponse.json({ error: "missing_fields" }, { status: 400 })
@@ -17,15 +17,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "server_misconfiguration" }, { status: 500 })
     }
 
-    sgMail.setApiKey(apiKey)
-
-    const senderEmail = fromEmail || process.env.SENDGRID_FROM_EMAIL
-    const senderName = fromName || "Tom Songer"
-
+    const senderEmail = process.env.SENDGRID_FROM_EMAIL
     if (!senderEmail) {
       console.error("[send-email] SENDGRID_FROM_EMAIL is not set")
       return NextResponse.json({ error: "server_misconfiguration" }, { status: 500 })
     }
+
+    sgMail.setApiKey(apiKey)
+
+    const senderName = fromName || "Tom Songer"
+
+    console.log(`[send-email] sending to: ${to} from: ${senderEmail}`)
 
     const msg: sgMail.MailDataRequired = {
       to,
@@ -40,7 +42,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true })
   } catch (err: unknown) {
     const sgError = err as { response?: { body?: unknown }; message?: string }
-    console.error("[send-email] error:", sgError?.response?.body ?? sgError?.message ?? err)
-    return NextResponse.json({ error: "send_failed" }, { status: 500 })
+    const detail = sgError?.response?.body
+      ? JSON.stringify(sgError.response.body)
+      : sgError?.message ?? String(err)
+    console.error("[send-email] error:", detail)
+    return NextResponse.json({ error: "send_failed", detail }, { status: 500 })
   }
 }
