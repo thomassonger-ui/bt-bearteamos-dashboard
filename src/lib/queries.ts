@@ -592,3 +592,12 @@ function rowToLead(row: Record<string, unknown>): Lead {
     createdAt: row.created_at as string,
   }
 }
+export async function getAgentByEmail(email: string) {
+  const { data } = await getSupabase()
+    .from('agents')
+    .select('*')
+    .eq('email', email.toLowerCase().trim())
+    .limit(1)
+    .single()
+  return data ?? null
+}
