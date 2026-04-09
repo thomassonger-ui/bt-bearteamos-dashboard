@@ -2,12 +2,18 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { getAgentByUsername, getFirstAgent } from '@/lib/queries'
+import { createClient } from '@supabase/supabase-js'
+import { getAgentByEmail, getFirstAgent } from '@/lib/queries'
 import { runEngine } from '@/lib/engine'
 import { logActivity } from '@/lib/queries'
 
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
 export default function LoginPage() {
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -15,39 +21,44 @@ export default function LoginPage() {
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    if (!username.trim() || !password.trim()) { setError('Username and password are required.'); return }
+    if (!email.trim() || !password.trim()) { setError('Email and password are required.'); return }
     setLoading(true)
     setError('')
 
     try {
-      const authRes = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+      // Supabase Auth sign in
+      const { data, error: authErr } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
       })
 
-      const loginData = await authRes.json()
-
-      if (!authRes.ok) {
-        setError('Incorrect username or password.')
+      if (authErr || !data.session) {
+        setError('Incorrect email or password.')
         setLoading(false)
         return
       }
 
-      const loggedInUsername = username.toLowerCase().trim()
-      sessionStorage.setItem('bt_username', loggedInUsername)
-      if (loginData.is_admin) {
+      // Store session token for legacy middleware cookie check
+      const res = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access_token: data.session.access_token }),
+      })
+      const sessionData = await res.json()
+
+      sessionStorage.setItem('bt_username', email.trim().toLowerCase())
+      sessionStorage.setItem('bt_access_token', data.session.access_token)
+      if (sessionData.is_admin) {
         sessionStorage.setItem('bt_is_admin', 'true')
       } else {
         sessionStorage.removeItem('bt_is_admin')
       }
 
-      // MUST resolve agent BEFORE navigating — otherwise dashboard falls back to wrong agent
-      const agent = await getAgentByUsername(loggedInUsername) ?? await getFirstAgent()
+      // Resolve agent profile
+      const agent = await getAgentByEmail(email.trim().toLowerCase()) ?? await getFirstAgent()
       if (agent) {
         sessionStorage.setItem('bt_agent_id', agent.id)
         sessionStorage.setItem('bt_agent_name', agent.name)
-        // Background tasks — don't block navigation
         logActivity({
           agent_id: agent.id,
           action_type: 'login',
@@ -94,24 +105,11 @@ export default function LoginPage() {
         borderRadius: 12,
         padding: '40px 48px',
       }}>
-        {/* Title */}
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
-          <div style={{
-            fontSize: 28,
-            fontWeight: 700,
-            color: '#0b1d3a',
-            fontFamily: 'sans-serif',
-            lineHeight: 1.2,
-            marginBottom: 8,
-          }}>
-            BearTeamOS Dashboard
+          <div style={{ fontSize: 28, fontWeight: 700, color: '#0b1d3a', fontFamily: 'sans-serif', lineHeight: 1.2, marginBottom: 8 }}>
+            BearTeamOS
           </div>
-          <div style={{
-            fontSize: 14,
-            color: '#6b7280',
-            fontFamily: 'sans-serif',
-            fontWeight: 400,
-          }}>
+          <div style={{ fontSize: 14, color: '#6b7280', fontFamily: 'sans-serif', fontWeight: 400 }}>
             Bear Team Real Estate · Orlando, FL
           </div>
         </div>
@@ -119,21 +117,20 @@ export default function LoginPage() {
         <form onSubmit={handleLogin}>
           <div style={{ marginBottom: 12 }}>
             <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Username"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email"
               autoFocus
               style={inputStyle}
             />
           </div>
-
           <div style={{ marginBottom: 20 }}>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
+              placeholder="Password"
               style={inputStyle}
             />
           </div>
