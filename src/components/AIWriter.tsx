@@ -8,9 +8,9 @@ interface AIWriterProps {
 }
 
 const QUICK_PROMPTS = [
-  { label: 'First touch – new buyer lead', prompt: 'Write a short, warm first-touch email to a new buyer lead I just added to my pipeline. They're looking in Orlando.' },
-  { label: 'Follow-up after no response', prompt: 'Write a brief follow-up email to a seller lead who hasn't responded to my last message. Keep it casual, not pushy.' },
-  { label: 'Listing presentation invite', prompt: 'Write an email inviting a seller lead to a listing presentation. Highlight Bear Team's marketing and local Orlando expertise.' },
+  { label: 'First touch \u2013 new buyer lead', prompt: 'Write a short, warm first-touch email to a new buyer lead I just added to my pipeline. They\'re looking in Orlando.' },
+  { label: 'Follow-up after no response', prompt: 'Write a brief follow-up email to a seller lead who hasn\'t responded to my last message. Keep it casual, not pushy.' },
+  { label: 'Listing presentation invite', prompt: 'Write an email inviting a seller lead to a listing presentation. Highlight Bear Team\'s marketing and local Orlando expertise.' },
   { label: 'Price reduction conversation', prompt: 'Write a gentle email to a seller client suggesting we discuss a price reduction to attract more buyers.' },
   { label: 'Under contract congrats', prompt: 'Write a congratulations email to a buyer client who just went under contract. Warm, celebratory, and sets expectations for next steps.' },
   { label: 'Closed deal thank you', prompt: 'Write a thank-you email to a client after a successful closing. Ask for a referral and a Google review.' },
@@ -78,7 +78,7 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
         body: JSON.stringify({ prompt: fullPrompt, agentName, agentPhone, agentEmail, clientName: clientName.trim() || undefined }),
       })
       const data = await res.json()
-      let reply = data.reply ?? 'Something went wrong – try again.'
+      let reply = data.reply ?? 'Something went wrong \u2013 try again.'
       if (clientName.trim()) {
         reply = reply.replace(/\[CLIENT NAME\]/gi, clientName.trim())
         reply = reply.replace(/\[CLIENT'S NAME\]/gi, clientName.trim())
@@ -172,9 +172,9 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
               <div style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--bt-accent)' }} />
               <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>AI Writer</span>
             </div>
-            <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginTop: 2, marginLeft: 15 }}>Draft emails, scripts & messages</div>
+            <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginTop: 2, marginLeft: 15 }}>Draft emails, scripts &amp; messages</div>
           </div>
-          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--bt-text-dim)', fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}>✕</button>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: 'var(--bt-text-dim)', fontSize: 20, cursor: 'pointer', lineHeight: 1, padding: '0 4px' }}>&#x2715;</button>
         </div>
 
         {/* Quick prompts */}
@@ -207,10 +207,10 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
               style={{ flex: 1, padding: '10px 12px', fontSize: 12, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', color: 'var(--bt-text)', borderRadius: 5, resize: 'none', outline: 'none', lineHeight: 1.5, fontFamily: 'inherit' }} />
             <button type="submit" disabled={loading || !input.trim()}
               style={{ padding: '0 16px', background: input.trim() && !loading ? 'var(--bt-accent)' : 'var(--bt-border)', border: 'none', borderRadius: 5, color: 'var(--bt-black)', fontWeight: 700, fontSize: 18, cursor: input.trim() && !loading ? 'pointer' : 'default', flexShrink: 0, alignSelf: 'stretch' }}>
-              {loading ? '⏳' : '✨'}
+              {loading ? '\u23F3' : '\u2728'}
             </button>
           </div>
-          <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', marginTop: 4 }}>⌘ + Enter to generate</div>
+          <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', marginTop: 4 }}>\u2318 + Enter to generate</div>
         </form>
 
         {/* Output area */}
@@ -229,8 +229,6 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
           {/* Send bar */}
           {output && (
             <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-
-              {/* Recipient + Send/Schedule/Copy buttons */}
               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                 <input value={recipientEmail} onChange={e => setRecipientEmail(e.target.value)} placeholder="client@email.com"
                   style={{ flex: 1, padding: '8px 10px', fontSize: 12, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', color: 'var(--bt-text)', borderRadius: 4, outline: 'none', fontFamily: 'inherit' }} />
@@ -245,15 +243,17 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
                     border: '1px solid var(--bt-border)',
                     color: scheduleMode ? 'var(--bt-black)' : 'var(--bt-text-dim)',
                     borderRadius: 4, cursor: 'pointer',
-                  }}>🕐</button>
+                  }}>&#x1F550;</button>
 
-                {/* Send button */}
+                {/* Send / Schedule button */}
                 <button onClick={handleSend} disabled={!recipientEmail.trim() || sending}
                   style={{
                     fontSize: 12, padding: '8px 14px', fontWeight: 700,
-                    background: recipientEmail.trim() && !sending
-                      ? (sendStatus === 'Sent!' || sendStatus === 'Scheduled!' ? '#2ecc71' : sendStatus === 'Failed' || sendStatus === 'Error' ? '#e74c3c' : '#E04E4E')
-                      : 'var(--bt-border)',
+                    background: !recipientEmail.trim() || sending
+                      ? 'var(--bt-border)'
+                      : sendStatus === 'Sent!' || sendStatus === 'Scheduled!' ? '#2ecc71'
+                      : sendStatus === 'Failed' || sendStatus === 'Error' ? '#e74c3c'
+                      : '#E04E4E',
                     border: 'none', color: '#fff', borderRadius: 4,
                     cursor: recipientEmail.trim() ? 'pointer' : 'default', whiteSpace: 'nowrap',
                   }}>
@@ -266,7 +266,7 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
                 </button>
               </div>
 
-              {/* Schedule date/time picker — shown when schedule mode active */}
+              {/* DateTime picker */}
               {scheduleMode && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, whiteSpace: 'nowrap' }}>Send at</div>
@@ -284,7 +284,6 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
                   />
                 </div>
               )}
-
             </div>
           )}
         </div>
