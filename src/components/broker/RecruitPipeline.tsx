@@ -22,6 +22,7 @@ interface Props {
   onDraftOutreach: (lead: RecruitLead) => void
   onRefresh?: () => void
   onAddRecruit?: (data: Record<string, string>) => Promise<void>
+  onDelete?: (leadId: string) => Promise<void>
 }
 
 function daysSince(iso: string) {
@@ -310,6 +311,17 @@ Sarah Kim,sarah@example.com,321-555-5678,eXp Realty,8`}
                         background: 'var(--bt-accent)', color: 'var(--bt-black)',
                         border: 'none', borderRadius: 4, cursor: 'pointer',
                       }}>Draft Outreach</button>
+
+                      {onDelete && (
+                        <button onClick={async () => {
+                          if (!confirm(`Delete ${lead.name}? This cannot be undone.`)) return
+                          await onDelete(lead.id)
+                        }} style={{
+                          fontSize: 11, padding: '6px 12px', fontWeight: 600,
+                          background: '#E04E4E', color: '#fff',
+                          border: 'none', borderRadius: 4, cursor: 'pointer',
+                        }}>Delete</button>
+                      )}
 
                       {lead.phone && (
                         <a href={`tel:${lead.phone.replace(/\D/g, '')}`} style={{
