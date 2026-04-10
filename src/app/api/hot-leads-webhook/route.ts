@@ -160,11 +160,28 @@ export async function POST(req: NextRequest) {
     if (body.leads && Array.isArray(body.leads)) {
       // Direct payload: { source, leads: [...] }
       rawLeads = body.leads
-    } else if (body.resource?.defaultDatasetId) {
-      // Apify webhook payload: { source, resource: { defaultDatasetId: "..." } }
+    } else if (body.resource?.defaultDatasetId && !body.resource.defaultDatasetId.includes('{{')) {
+      // Apify webhook payload: { source, resource: { defaultDatasetId: "abc123" } }
       rawLeads = await fetchApifyDataset(body.resource.defaultDatasetId) as any[]
-    } else if (Array.isArray(body)) {
-      rawLeads = body
+    } else {
+      // Try to fetch from Apify using the actor run ID or dataset ID from any field
+      const datasetId = body.defaultDatasetId || body.datasetId || body.resource?.defaultDatasetId
+      if (datasetId && !String(datasetId).includes('{{')) {
+        rawLeads = await fetchApifyDataset(datasetId) as any[]
+      } else if (Array.isArray(body)) {
+        rawLeads = body
+      } else {
+        // Last resort: fetch the most recent dataset from this actor
+        const actorId = 'fatihtahta~craigslist-scraper'
+        const apifyToken = process.env.APIFY_API_TOKEN
+        if (apifyToken) {
+          const res = await globalThis.fetch(`https://api.apify.com/v2/acts/${actorId}/runs/last/dataset/items?format=json&token=${apifyToken}`)
+          if (res.ok) {
+            const data = await res.json()
+            if (Array.isArray(data)) rawLeads = data
+          }
+        }
+      }
     }
 
     if (!rawLeads.length) {
@@ -221,4 +238,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
 
