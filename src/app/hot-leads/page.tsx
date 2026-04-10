@@ -144,7 +144,7 @@ export default function HotLeadsPage() {
         const desc = [bedsMatch ? `${bedsMatch[1]} bed` : '', bathsMatch ? `${bathsMatch[1]} bath` : '', sqftMatch ? `${sqftMatch[1]} sqft` : ''].filter(Boolean).join(', ')
 
         const { error } = await getSupabase().from('pipeline').insert({
-          agent_id: 'a0000000-0000-0000-0000-000000000001',
+          agent_id: 'e424ecf9-ce0d-4e7f-85e9-286dd9f66e1e',
           lead_name: title.slice(0, 100),
           stage: 'new_lead',
           last_contact: new Date().toISOString(),
