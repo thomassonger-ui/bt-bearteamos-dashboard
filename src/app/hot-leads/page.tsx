@@ -84,12 +84,12 @@ export default function HotLeadsPage() {
         // Try named columns first
         const get = (keys: string[]) => { for (const k of keys) { const idx = headers.indexOf(k); if (idx >= 0 && vals[idx]) return vals[idx].trim() } return '' }
 
-        // Smart detect: address = contains street number + name pattern
+        // Smart detect: address = contains street number + name pattern (handles "126 1st St", "712 19th Ave", etc.)
         let title = get(['address', 'title', 'name', 'lead_name', 'property', 'street'])
-        if (!title) title = findInRow(vals, v => /^\d+\s+[A-Za-z]/.test(v) && !v.startsWith('http') && !v.startsWith('$') && v.length > 10 && v.length < 80)
+        if (!title) title = findInRow(vals, v => /^\d+\s+[\w]/.test(v) && !v.startsWith('http') && !v.startsWith('$') && !/^\d+$/.test(v.trim()) && v.length > 6 && v.length < 100 && /[A-Za-z]{2,}/.test(v))
 
         // Smart detect: full address with city/state (e.g. "123 Main St, Orlando, FL 32801")
-        let fullAddr = findInRow(vals, v => /\d+.*,\s*(Orlando|FL|Florida)/i.test(v))
+        let fullAddr = findInRow(vals, v => /\d+.*,\s*(Orlando|FL|Florida|Kissimmee|Sanford|Ocoee|Apopka|Winter Park|Altamonte|Lake Mary)/i.test(v))
         if (!title && fullAddr) title = fullAddr.split(',')[0].trim()
 
         // Smart detect: address from URL path (fsbo.com format: /search/123-main-st-orlando-fl-32819)
@@ -111,11 +111,11 @@ export default function HotLeadsPage() {
 
         if (!title) { skipped++; continue }
 
-        // Smart detect: price = starts with $ or is a number > 20000
+        // Smart detect: price = starts with $ or is a number > 5000
         let priceStr = get(['price', 'sale_price', 'asking_price', 'list_price'])
-        if (!priceStr) priceStr = findInRow(vals, v => /^\$[\d,]+$/.test(v))
+        if (!priceStr) priceStr = findInRow(vals, v => /^\$[\d,]+/.test(v))
         const price = priceStr ? parseFloat(priceStr.replace(/[$,]/g, '')) : undefined
-        if (price && price < 20000) { skipped++; continue } // skip rentals
+        if (price && price < 5000) { skipped++; continue } // skip obvious rentals (weekly/nightly rates)
 
         // Smart detect: URL = starts with http
         let url = get(['url', 'link', 'listing_url', 'c11n href', 'block href'])
@@ -511,3 +511,4 @@ const selectStyle: React.CSSProperties = {
   color: 'var(--bt-text)',
   cursor: 'pointer',
 }
+
