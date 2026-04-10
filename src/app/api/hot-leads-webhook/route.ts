@@ -90,20 +90,41 @@ function normalizeLead(raw: any, source: string) {
   }
 
   // Default format (Craigslist, etc.)
-  const title = raw.title || raw.name || raw.business_name || raw.ownerName || raw.headline || ''
+  // Craigslist scraper uses: name, location, price, url, description
+  const title = raw.title || raw.name || raw.address || raw.propertyAddress || raw.headline || raw.business_name || raw.ownerName || ''
   const desc = raw.description || raw.body || raw.text || raw.content || ''
-  const address = raw.location || raw.address || raw.propertyAddress || raw.neighborhood || raw.street || ''
+  // Craigslist: location field has city/neighborhood. Try to build a useful address.
+  const rawLocation = raw.location || raw.neighborhood || raw.area || ''
+  const rawAddress = raw.address || raw.propertyAddress || raw.street || ''
+  const address = rawAddress || rawLocation
+
+  // Build a meaningful name from URL if title is empty (common with Craigslist scraper)
+  const urlForName = raw.url || raw.link || raw.website || ''
+  let derivedName = title
+  if (!derivedName && urlForName) {
+    // Extract from craigslist URL like /for-sale/real-estate/123-main-st-12345.html
+    const urlPathMatch = urlForName.match(/\/([^/]+?)(?:\.html?)?(?:\?.*)?$/)
+    if (urlPathMatch) {
+      derivedName = urlPathMatch[1]
+        .replace(/-(\d{5})/, ' $1')
+        .replace(/-/g, ' ')
+        .replace(/\b\w/g, (c: string) => c.toUpperCase())
+        .slice(0, 80)
+    }
+  }
+  if (!derivedName && rawLocation) derivedName = rawLocation
+  if (!derivedName) derivedName = `${source} Lead`
 
   return {
-    name: title || 'Unknown Lead',
-    title,
+    name: derivedName,
+    title: title || derivedName,
     description: desc,
     price: raw.price,
     address,
     zip: raw.zip || raw.zipCode || raw.postalCode,
     phone: raw.phone || raw.sellerPhone || raw.phoneNumber,
     email: raw.email || raw.sellerEmail || raw.replyEmail,
-    url: raw.url || raw.link || raw.website || raw.googleUrl,
+    url: urlForName,
     source_id: raw.pid || raw.id || raw.placeId || raw.cid || raw.parcelId || raw.folio || raw.url,
     assessed_value: raw.assessedValue || raw.marketValue,
     tax_status: raw.taxStatus,
@@ -200,3 +221,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
+
