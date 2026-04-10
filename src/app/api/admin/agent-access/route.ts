@@ -22,10 +22,34 @@ export async function POST(req: NextRequest) {
 
   try {
     if (action === 'invite') {
+      // Try invite (sends magic link email)
       const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
         redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/onboarding`,
       })
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+      if (error) {
+        // If rate limited, create the user without email and return a manual link
+        if (error.message.toLowerCase().includes('rate limit') || error.message.toLowerCase().includes('email')) {
+          const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+            email,
+            email_confirm: false,
+            user_metadata: {},
+          })
+          if (createErr) return NextResponse.json({ error: createErr.message }, { status: 400 })
+          // Generate a magic link they can send manually
+          const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
+            type: 'invite',
+            email,
+            options: { redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/onboarding` },
+          })
+          const link = linkData?.properties?.action_link ?? null
+          return NextResponse.json({
+            ok: true,
+            rateLimit: true,
+            message: `Email rate limited — user created. Send this link manually: ${link ?? '(generate in Supabase dashboard)'}`,
+          })
+        }
+        return NextResponse.json({ error: error.message }, { status: 400 })
+      }
       return NextResponse.json({ ok: true, message: `Invite sent to ${email}` })
     }
 
@@ -36,7 +60,6 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
     if (action === 'reset') {
-      // Send password reset email — redirects to /login so they can set new password
       const { error } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
         redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/login`,
       })
@@ -46,7 +69,7 @@ export async function POST(req: NextRequest) {
 
     if (action === 'revoke') {
       const { error } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
-        ban_duration: '87600h', // 10 years = effectively permanent
+        ban_duration: '87600h',
       })
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
       return NextResponse.json({ ok: true, message: `Access revoked for ${email}` })
@@ -63,7 +86,7 @@ export async function POST(req: NextRequest) {
     if (action === 'delete') {
       const { error } = await supabaseAdmin.auth.admin.deleteUser(user.id)
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-      return NextResponse.json({ ok: true, message: `User ${email} permanently deleted` })
+      return NextResponse.json({ ok: true, message: `${email} permanently deleted` })
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
