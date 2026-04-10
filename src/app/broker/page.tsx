@@ -333,9 +333,9 @@ export default function BrokerPage() {
                                   handleAccessAction('delete', u.email!)
                                 }} style={{
                                   fontSize: 10, padding: '4px 10px', fontWeight: 600,
-                                  background: 'transparent', color: '#888',
-                                  border: '1px solid #444', borderRadius: 3, cursor: 'pointer',
-                                }}>Delete</button>
+                                  background: 'transparent', color: '#aaa',
+                                  border: '1px solid #666', borderRadius: 3, cursor: 'pointer',
+                                }}>🗑 Delete</button>
                               </div>
                             )}
                           </td>
