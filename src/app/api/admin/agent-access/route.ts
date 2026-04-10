@@ -36,15 +36,11 @@ export async function POST(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
     if (action === 'reset') {
-      const { error } = await supabaseAdmin.auth.admin.generateLink({
-        type: 'recovery',
-        email,
+      // Send password reset email — redirects to /login so they can set new password
+      const { error } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
+        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/login`,
       })
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-      // Also send via Supabase built-in reset
-      await supabaseAdmin.auth.resetPasswordForEmail(email, {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/onboarding`,
-      })
       return NextResponse.json({ ok: true, message: `Password reset sent to ${email}` })
     }
 
@@ -62,6 +58,12 @@ export async function POST(req: NextRequest) {
       })
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
       return NextResponse.json({ ok: true, message: `Access restored for ${email}` })
+    }
+
+    if (action === 'delete') {
+      const { error } = await supabaseAdmin.auth.admin.deleteUser(user.id)
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+      return NextResponse.json({ ok: true, message: `User ${email} permanently deleted` })
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
