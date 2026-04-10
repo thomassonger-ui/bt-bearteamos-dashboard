@@ -5,12 +5,9 @@ const DEFAULT_AGENT_ID = 'e424ecf9-ce0d-4e7f-85e9-286dd9f66e1e'
 
 // Blocklist — skip leads from brokers, investors, wholesalers
 const BLOCKLIST = [
-  'we buy houses', 'cash offer', 'cash for your', 'investor', 'investment opportunity',
-  'wholesale', 'wholesaler', 'brokerage', 'licensed agent', 'licensed realtor',
-  'realty company', 'real estate group', 'property management', 'flip this',
-  'buy and hold', 'rental property for investors', 'turnkey investment',
-  'broker', 'MLS#', 'mls #', 'listed by', 'listing agent',
-  'schedule a showing', 'open house hosted by', 'presented by',
+  'mls#', 'mls #', 'listing agent', 'listed by agent',
+  'open house hosted by', 'presented by',
+  'we buy houses', 'cash offer', 'wholesale', 'wholesaler',
 ]
 
 function isBlocklisted(title: string, desc: string): boolean {
