@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { upsertHotLead, updateHotLeadSourceStatus } from '@/lib/queries'
 
-const DEFAULT_AGENT_ID = 'a0000000-0000-0000-0000-000000000001'
+const DEFAULT_AGENT_ID = 'e424ecf9-ce0d-4e7f-85e9-286dd9f66e1e'
 
 // Blocklist — skip leads from brokers, investors, wholesalers
 const BLOCKLIST = [
