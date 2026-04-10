@@ -132,7 +132,8 @@ function normalizeLead(raw: any, source: string) {
 }
 
 async function fetchApifyDataset(datasetId: string): Promise<unknown[]> {
-  const url = 'https://api.apify.com/v2/datasets/' + datasetId + '/items?format=json'
+  const token = process.env.APIFY_API_TOKEN
+const url = `https://api.apify.com/v2/datasets/${datasetId}/items?format=json${token ? `&token=${token}` : ''}`
   const res = await globalThis.fetch(url)
   if (!res.ok) return []
   const data = await res.json()
