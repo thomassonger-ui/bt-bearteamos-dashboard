@@ -29,7 +29,7 @@ function daysSince(iso: string) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24))
 }
 
-export default function RecruitPipeline({ leads, onStageChange, onConvert, onDraftOutreach, onRefresh, onAddRecruit }: Props) {
+export default function RecruitPipeline({ leads, onStageChange, onConvert, onDraftOutreach, onRefresh, onAddRecruit, onDelete }: Props) {
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [showAdd, setShowAdd] = useState(false)
