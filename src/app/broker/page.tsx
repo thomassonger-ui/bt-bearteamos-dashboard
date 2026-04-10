@@ -87,11 +87,20 @@ export default function BrokerPage() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      // Check sessionStorage first for immediate render
+      const storedEmail = sessionStorage.getItem('bt_user_email') ?? ''
+      if (storedEmail === SUPER_ADMIN_EMAIL) {
+        setCurrentUserEmail(storedEmail)
+        setIsSuperAdmin(true)
+      }
+      // Also verify via Supabase auth
       import('@/lib/supabase').then(({ getSupabase }) => {
         getSupabase().auth.getUser().then(({ data }: { data: { user: { email?: string } | null } }) => {
           const email = data?.user?.email ?? ''
           setCurrentUserEmail(email)
           setIsSuperAdmin(email === SUPER_ADMIN_EMAIL)
+          // Store for next render
+          if (email) sessionStorage.setItem('bt_user_email', email)
         })
       })
     }
