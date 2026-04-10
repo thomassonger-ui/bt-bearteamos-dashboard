@@ -124,10 +124,12 @@ export default function BrokerPage() {
 
   async function handleAccessAction(action: string, email: string) {
     setAccessMsg(null)
+    // Always read the most current email — sessionStorage is the reliable sync fallback
+    const callerEmail = currentUserEmail || sessionStorage.getItem('bt_user_email') || ''
     const res = await fetch('/api/admin/agent-access', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, email, callerEmail: currentUserEmail }),
+      body: JSON.stringify({ action, email, callerEmail }),
     })
     const data = await res.json()
     setAccessMsg(data.message || data.error)
@@ -326,6 +328,14 @@ export default function BrokerPage() {
                                     border: '1px solid #4CAF50', borderRadius: 3, cursor: 'pointer',
                                   }}>Restore Access</button>
                                 )}
+                                <button onClick={() => {
+                                  if (!confirm(`Permanently delete ${u.email}? This removes them from Supabase Auth completely and cannot be undone.`)) return
+                                  handleAccessAction('delete', u.email!)
+                                }} style={{
+                                  fontSize: 10, padding: '4px 10px', fontWeight: 600,
+                                  background: 'transparent', color: '#888',
+                                  border: '1px solid #444', borderRadius: 3, cursor: 'pointer',
+                                }}>Delete</button>
                               </div>
                             )}
                           </td>
@@ -484,3 +494,4 @@ export default function BrokerPage() {
     </div>
   )
 }
+
