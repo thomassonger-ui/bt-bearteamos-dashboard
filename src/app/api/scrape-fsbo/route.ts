@@ -9,7 +9,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const DEFAULT_AGENT_ID = 'a0000000-0000-0000-0000-000000000001'
+const DEFAULT_AGENT_ID = 'e424ecf9-ce0d-4e7f-85e9-286dd9f66e1e' // real agent ID — matches hot-leads-webhook
 
 // Blocklist — skip broker/investor posts
 const BLOCKLIST = [
