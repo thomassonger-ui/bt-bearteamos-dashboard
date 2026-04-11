@@ -203,12 +203,16 @@ export default function HotLeadsPage() {
 
     // 3. Run skip trace via server-side API route (TRACERFY_API_KEY is server-only)
     const lead = leads.find(l => l.id === leadId)
-    if (lead?.property_address) {
-      // Parse "5314 E Kaley Street ORLANDO, FL 32812" into street + city
-      const addrMatch = lead.property_address.match(/^(\d+\s+.+?)\s+([A-Za-z\s]+?),?\s*FL/i)
-      const streetAddress = addrMatch ? addrMatch[1].trim() : lead.property_address
-      const city = addrMatch ? addrMatch[2].trim() : 'Orlando'
-
+    if (lead?.lead_name) {
+      // lead_name holds the full address e.g. "5314 E Kaley Street ORLANDO, FL 32812"
+      // Greedy match: capture everything before the last city token + FL
+      const addrMatch = lead.lead_name.match(/^(.+)\s+([A-Za-z]+(?:\s+[A-Za-z]+)*),?\s*FL\b/i)
+      let streetAddress = lead.lead_name
+      let city = 'Orlando'
+      if (addrMatch) {
+        streetAddress = addrMatch[1].trim()
+        city = addrMatch[2].trim()
+      }
       fetch('/api/skip-trace', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
