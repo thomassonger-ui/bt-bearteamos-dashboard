@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { getSupabase } from '@/lib/supabase'
-import { skipTraceAddress } from '@/lib/skipTrace'   // ← NEW
 import type { Pipeline, HotLeadSource } from '@/types'
 import ResponsiveShell from '@/components/ResponsiveShell'
 import HotLeadCard from '@/components/HotLeadCard'
@@ -202,25 +201,27 @@ export default function HotLeadsPage() {
     sessionStorage.setItem(`bt_accept_count_${aid}`, newCount.toString())
     sessionStorage.setItem(`bt_accept_date_${aid}`, new Date().toDateString())
 
-    // 3. Run skip trace in background — enrich with owner name, phone, email
+    // 3. Run skip trace via server-side API route (TRACERFY_API_KEY is server-only)
     const lead = leads.find(l => l.id === leadId)
     if (lead?.property_address) {
-      const cityMatch = lead.property_address.match(/([A-Za-z\s]+),?\s*FL/i)
-      const city = cityMatch?.[1]?.trim() ?? 'Orlando'
+      // Parse "5314 E Kaley Street ORLANDO, FL 32812" into street + city
+      const addrMatch = lead.property_address.match(/^(\d+\s+.+?)\s+([A-Za-z\s]+?),?\s*FL/i)
+      const streetAddress = addrMatch ? addrMatch[1].trim() : lead.property_address
+      const city = addrMatch ? addrMatch[2].trim() : 'Orlando'
 
-      skipTraceAddress(lead.property_address, city, 'FL', lead.zip_code ?? undefined)
-        .then(async (trace) => {
-          if (!trace) return
-          const updates: Record<string, string> = {}
-          if (trace.owner_name && !lead.lead_name) updates.lead_name = trace.owner_name
-          if (trace.phone1 && !lead.phone)          updates.phone    = trace.phone1
-          if (trace.email  && !lead.email)           updates.email    = trace.email
-          if (Object.keys(updates).length > 0) {
-            await getSupabase().from('pipeline').update(updates).eq('id', leadId)
-            console.log('[skipTrace] Enriched lead:', leadId, updates)
-          }
-        })
-        .catch(err => console.error('[skipTrace] Background enrichment failed:', err))
+      fetch('/api/skip-trace', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadId,
+          address: streetAddress,
+          city,
+          zip: lead.zip_code ?? undefined,
+        }),
+      })
+        .then(r => r.json())
+        .then(result => console.log('[skipTrace] Result:', result))
+        .catch(err => console.error('[skipTrace] API call failed:', err))
     }
 
     fetchLeads()
