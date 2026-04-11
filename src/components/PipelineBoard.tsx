@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { Pipeline, ChecklistEntry } from '@/types'
+import EscrowPanel from '@/components/EscrowPanel'
 
 interface Props {
   pipeline: Pipeline[]
@@ -376,6 +377,14 @@ export default function PipelineBoard({ pipeline, onContact, onSelectLead, selec
                             onToggle={() => setExpandedPre(p => ({ ...p, [lead.id]: !p[lead.id] }))}
                             onCheck={(key, done) => saveComplianceChecklist(lead.id, 'pre_contract_checklist', preCL, key, { done, date: done ? new Date().toISOString().split('T')[0] : undefined })}
                             onDate={(key, date) => saveComplianceChecklist(lead.id, 'pre_contract_checklist', preCL, key, { date })}
+                          />
+
+                          {/* 1.5 ── Escrow Compliance Panel */}
+                          <EscrowPanel
+                            lead={lead}
+                            isAdmin={typeof window !== 'undefined' && sessionStorage.getItem('bt_is_admin') === 'true'}
+                            userName={typeof window !== 'undefined' ? (sessionStorage.getItem('bt_agent_id') ?? 'Agent') : 'Agent'}
+                            onSave={async (data) => { await onEditSave?.(lead.id, data) }}
                           />
 
                           {/* 2 ── Transaction Tracker */}
