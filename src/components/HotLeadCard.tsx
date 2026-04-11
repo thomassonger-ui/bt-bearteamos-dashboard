@@ -1,6 +1,7 @@
 'use client'
 
-import type { Pipeline } from '@/types'
+import { useState } from 'react'
+import type { Pipeline, Agent } from '@/types'
 
 interface Props {
   lead: Pipeline
@@ -9,6 +10,8 @@ interface Props {
   onRefresh: () => void
   onAccept?: (leadId: string) => void
   canAccept?: boolean
+  agents?: Agent[]
+  onTransfer?: (leadId: string, agentId: string) => void
 }
 
 function timeAgo(iso: string): string {
@@ -26,8 +29,20 @@ function formatCurrency(n?: number): string {
   return '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 })
 }
 
-export default function HotLeadCard({ lead, urgencyColor, sourceLabel, onAccept, canAccept = true }: Props) {
+export default function HotLeadCard({ lead, urgencyColor, sourceLabel, onAccept, canAccept = true, agents, onTransfer }: Props) {
   const typeLabel = lead.hot_lead_type?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  const [showTransfer, setShowTransfer] = useState(false)
+  const [transferring, setTransferring] = useState(false)
+  const [transferred, setTransferred] = useState(false)
+
+  async function handleTransfer(agentId: string) {
+    if (!onTransfer) return
+    setTransferring(true)
+    setShowTransfer(false)
+    await onTransfer(lead.id, agentId)
+    setTransferring(false)
+    setTransferred(true)
+  }
 
   return (
     <div style={{
@@ -107,7 +122,7 @@ export default function HotLeadCard({ lead, urgencyColor, sourceLabel, onAccept,
       )}
 
       {/* Row 4: Actions */}
-      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+      <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
         {lead.source_url && (
           <a
             href={lead.source_url}
@@ -137,6 +152,61 @@ export default function HotLeadCard({ lead, urgencyColor, sourceLabel, onAccept,
           <span style={{ fontSize: 10, padding: '4px 8px', color: 'var(--bt-muted)' }}>
             Daily limit reached
           </span>
+        )}
+
+        {/* Transfer button — admin only, shown when agents prop is provided */}
+        {agents && agents.length > 0 && onTransfer && !transferred && (
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowTransfer(v => !v)}
+              disabled={transferring}
+              style={{
+                fontSize: 10, fontWeight: 600, padding: '4px 12px',
+                background: transferring ? 'var(--bt-surface)' : '#1976D2',
+                color: transferring ? 'var(--bt-text-dim)' : '#fff',
+                border: '1px solid #1976D2', borderRadius: 3, cursor: transferring ? 'default' : 'pointer',
+              }}
+            >
+              {transferring ? 'Transferring…' : 'Transfer ▾'}
+            </button>
+
+            {showTransfer && (
+              <div style={{
+                position: 'absolute', top: '100%', left: 0, zIndex: 200,
+                background: 'var(--bt-surface)', border: '1px solid var(--bt-border)',
+                borderRadius: 4, boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+                minWidth: 180, marginTop: 4,
+              }}>
+                <div style={{ padding: '6px 10px', fontSize: 9, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--bt-text-dim)', textTransform: 'uppercase', borderBottom: '1px solid var(--bt-border)' }}>
+                  Assign to Agent
+                </div>
+                {agents.map(agent => (
+                  <button
+                    key={agent.id}
+                    onClick={() => handleTransfer(agent.id)}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '8px 12px', fontSize: 11, fontWeight: 500,
+                      color: 'var(--bt-text)', background: 'transparent',
+                      border: 'none', cursor: 'pointer',
+                      borderBottom: '1px solid var(--bt-border)',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.05)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    {agent.name}
+                    <span style={{ fontSize: 9, color: 'var(--bt-text-dim)', display: 'block' }}>
+                      {agent.stage}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {transferred && (
+          <span style={{ fontSize: 10, color: '#4fbf8a', fontWeight: 600 }}>✓ Transferred</span>
         )}
       </div>
     </div>
