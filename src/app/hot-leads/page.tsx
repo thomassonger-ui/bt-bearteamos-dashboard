@@ -36,7 +36,7 @@ export default function HotLeadsPage() {
   const [showUpload, setShowUpload] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadResult, setUploadResult] = useState<string | null>(null)
-  const MAX_DAILY = 10
+  const MAX_DAILY = 2
 
   useEffect(() => {
     setIsAdmin(sessionStorage.getItem('bt_is_admin') === 'true')
