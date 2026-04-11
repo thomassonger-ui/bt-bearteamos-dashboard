@@ -21,8 +21,58 @@ const STAGES: { key: string; label: string; color: string }[] = [
   { key: 'under_contract',     label: 'Under Contract',  color: '#4CAF50' },
 ]
 
+// ─── TX Checklist sections (BearTeam Section 2) ──────────────────────────────
+const TX_SECTIONS = [
+  {
+    group: 'Contract & EMD',
+    items: [
+      { key: 'executed_contract',   label: 'Execute purchase agreement' },
+      { key: 'emd_collected',       label: 'EMD collected & delivered' },
+      { key: 'escrow_opened',       label: 'Escrow / title opened' },
+    ],
+  },
+  {
+    group: 'Inspection',
+    items: [
+      { key: 'inspection_ordered',    label: 'Inspection ordered' },
+      { key: 'inspection_reviewed',   label: 'Inspection report reviewed' },
+      { key: 'repair_requests_sent',  label: 'Repair requests submitted' },
+      { key: 'repair_addendum_signed',label: 'Repair addendum signed' },
+    ],
+  },
+  {
+    group: 'Financing & Appraisal',
+    items: [
+      { key: 'loan_app_submitted', label: 'Loan application submitted' },
+      { key: 'appraisal_ordered',  label: 'Appraisal ordered' },
+      { key: 'appraisal_received', label: 'Appraisal received' },
+      { key: 'clear_to_close',     label: 'Clear to close' },
+    ],
+  },
+  {
+    group: 'Title & Closing',
+    items: [
+      { key: 'title_commitment',   label: 'Title commitment received' },
+      { key: 'closing_disclosure', label: 'Closing disclosure reviewed' },
+      { key: 'final_walkthrough',  label: 'Final walkthrough done' },
+      { key: 'keys_transferred',   label: 'Keys transferred / Closed' },
+    ],
+  },
+]
+
 function daysSince(iso: string) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24))
+}
+
+function fmtShort(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })
+}
+
+function addDaysISO(iso: string, n: number): string {
+  const d = new Date(iso)
+  d.setDate(d.getDate() + n)
+  return d.toISOString()
 }
 
 export default function PipelineBoard({ pipeline, onContact, onSelectLead, selectedLeadId, onStageChange, onEditSave }: Props) {
@@ -42,6 +92,8 @@ export default function PipelineBoard({ pipeline, onContact, onSelectLead, selec
   const [apptTitle, setApptTitle] = useState('')
   const [apptSaving, setApptSaving] = useState(false)
   const [apptStatus, setApptStatus] = useState<string | null>(null)
+  // Transaction tracker: track expanded state per lead id
+  const [expandedTx, setExpandedTx] = useState<Record<string, boolean>>({})
 
   const grouped = STAGES.map(s => ({
     ...s,
@@ -90,23 +142,19 @@ export default function PipelineBoard({ pipeline, onContact, onSelectLead, selec
     setApptSaving(true)
     setApptStatus(null)
     try {
-      const [h, m] = apptTime.split(':').map(Number)
       const start = new Date(`${apptDate}T${apptTime}:00`)
       const end = new Date(start.getTime() + parseInt(apptDuration) * 60 * 1000)
       const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
 
-      // Create via Google Calendar API iframe
       const title = encodeURIComponent(apptTitle || `Meeting with ${apptLead.lead_name}`)
       const details = encodeURIComponent(`Lead: ${apptLead.lead_name}\nType: ${apptLead.lead_type || 'N/A'}\nPhone: ${apptLead.phone || 'N/A'}\nEmail: ${apptLead.email || 'N/A'}`)
       const calUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${fmt(start)}/${fmt(end)}`
 
-      // Open in hidden iframe to avoid leaving page
       const iframe = document.createElement('iframe')
       iframe.style.display = 'none'
       iframe.src = calUrl
       document.body.appendChild(iframe)
 
-      // Also update lead stage to appointment_set
       if (onStageChange) {
         await onStageChange(apptLead.id, 'appointment_set')
       }
@@ -221,73 +269,184 @@ export default function PipelineBoard({ pipeline, onContact, onSelectLead, selec
                         </div>
                       )}
 
-                      {/* Transaction Timeline — Under Contract only */}
+                      {/* ─── Transaction Tracker — Under Contract only ─── */}
                       {col.key === 'under_contract' && (
                         <div onClick={e => e.stopPropagation()} style={{
-                          marginBottom: 6, padding: '6px', background: 'rgba(76,175,80,0.06)',
-                          border: '1px solid rgba(76,175,80,0.2)', borderRadius: 4,
+                          marginBottom: 6,
+                          background: 'rgba(76,175,80,0.06)',
+                          border: '1px solid rgba(76,175,80,0.2)',
+                          borderRadius: 4,
                         }}>
-                          {/* Closing countdown */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                            <span style={{ fontSize: 9, fontWeight: 700, color: '#4CAF50', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Closing Timeline</span>
-                            {lead.target_close_date && (
-                              <span style={{
-                                fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 2,
-                                background: Math.ceil((new Date(lead.target_close_date).getTime() - Date.now()) / 86400000) <= 7 ? '#E04E4E' : '#4CAF50',
-                                color: '#fff',
-                              }}>
-                                {Math.max(0, Math.ceil((new Date(lead.target_close_date).getTime() - Date.now()) / 86400000))}d left
-                              </span>
-                            )}
+
+                          {/* Header row */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 8px', borderBottom: '1px solid rgba(76,175,80,0.15)' }}>
+                            <span style={{ fontSize: 9, fontWeight: 700, color: '#4CAF50', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                              Transaction
+                            </span>
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                              {lead.target_close_date && (() => {
+                                const dLeft = Math.ceil((new Date(lead.target_close_date).getTime() - Date.now()) / 86400000)
+                                return (
+                                  <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 2, background: dLeft <= 7 ? '#E04E4E' : '#4CAF50', color: '#fff' }}>
+                                    {Math.max(0, dLeft)}d
+                                  </span>
+                                )
+                              })()}
+                              <button
+                                onClick={() => setExpandedTx(prev => ({ ...prev, [lead.id]: !prev[lead.id] }))}
+                                style={{ background: 'transparent', border: 'none', color: 'var(--bt-text-dim)', fontSize: 10, cursor: 'pointer', lineHeight: 1, padding: '0 2px' }}
+                              >
+                                {expandedTx[lead.id] ? '▲' : '▼'}
+                              </button>
+                            </div>
                           </div>
 
-                          {/* Close date setter */}
-                          {!lead.target_close_date && (
-                            <div style={{ marginBottom: 5 }}>
-                              <input
-                                type="date"
-                                onChange={async (e) => {
-                                  if (e.target.value) await onEditSave?.(lead.id, { target_close_date: new Date(e.target.value).toISOString() })
-                                }}
-                                style={{ width: '100%', padding: '3px 5px', fontSize: 9, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', color: 'var(--bt-text)', borderRadius: 3 }}
-                              />
+                          {/* Dates row — always visible */}
+                          <div style={{ padding: '5px 8px', borderBottom: expandedTx[lead.id] ? '1px solid rgba(76,175,80,0.15)' : 'none' }}>
+                            {/* Effective Date */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                              <span style={{ fontSize: 9, color: 'var(--bt-text-dim)', whiteSpace: 'nowrap', minWidth: 62 }}>Eff. Date:</span>
+                              {lead.effective_date ? (
+                                <span style={{ fontSize: 9, color: '#4CAF50', fontWeight: 700 }}>
+                                  {fmtShort(lead.effective_date)} ✓
+                                </span>
+                              ) : (
+                                <input
+                                  type="date"
+                                  onChange={async (e) => {
+                                    if (!e.target.value) return
+                                    await onEditSave?.(lead.id, { effective_date: e.target.value })
+                                    if (lead.agent_id) {
+                                      fetch('/api/transaction-tasks', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ leadId: lead.id, agentId: lead.agent_id, effectiveDate: e.target.value }),
+                                      }).catch(console.error)
+                                    }
+                                  }}
+                                  style={{ flex: 1, padding: '2px 4px', fontSize: 9, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', color: 'var(--bt-text)', borderRadius: 3 }}
+                                />
+                              )}
+                            </div>
+                            {/* Close Date */}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                              <span style={{ fontSize: 9, color: 'var(--bt-text-dim)', whiteSpace: 'nowrap', minWidth: 62 }}>Close Date:</span>
+                              {lead.target_close_date ? (
+                                <span style={{ fontSize: 9, color: 'var(--bt-text)', fontWeight: 600 }}>
+                                  {fmtShort(lead.target_close_date)}
+                                </span>
+                              ) : (
+                                <input
+                                  type="date"
+                                  onChange={async (e) => {
+                                    if (e.target.value) await onEditSave?.(lead.id, { target_close_date: new Date(e.target.value).toISOString() })
+                                  }}
+                                  style={{ flex: 1, padding: '2px 4px', fontSize: 9, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', color: 'var(--bt-text)', borderRadius: 3 }}
+                                />
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Expanded: Deadlines + Full Checklist */}
+                          {expandedTx[lead.id] && (
+                            <div style={{ padding: '6px 8px' }}>
+
+                              {/* ── Critical Deadline Tracker ── */}
+                              {lead.effective_date && (() => {
+                                const deadlines = [
+                                  { label: 'EMD Due',          day: 3  },
+                                  { label: 'Loan App',         day: 5  },
+                                  { label: 'Inspection End',   day: 10 },
+                                  { label: 'Repair Request',   day: 11 },
+                                  { label: 'Seller Response',  day: 13 },
+                                  { label: 'Appraisal',        day: 21 },
+                                ]
+                                return (
+                                  <div style={{ marginBottom: 8 }}>
+                                    <div style={{ fontSize: 8, fontWeight: 700, color: 'var(--bt-text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>
+                                      Critical Deadlines
+                                    </div>
+                                    {deadlines.map(dl => {
+                                      const dueISO = addDaysISO(lead.effective_date!, dl.day)
+                                      const past = new Date(dueISO) < new Date()
+                                      return (
+                                        <div key={dl.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '1px 0' }}>
+                                          <span style={{ fontSize: 9, color: past ? '#E04E4E' : 'var(--bt-text-dim)' }}>
+                                            {past ? '⚠ ' : ''}{dl.label}
+                                          </span>
+                                          <span style={{ fontSize: 9, fontWeight: 700, color: past ? '#E04E4E' : 'var(--bt-text)' }}>
+                                            {fmtShort(dueISO)}
+                                          </span>
+                                        </div>
+                                      )
+                                    })}
+                                    {lead.target_close_date && (
+                                      <>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0' }}>
+                                          <span style={{ fontSize: 9, color: 'var(--bt-text-dim)' }}>Closing Disclosure</span>
+                                          <span style={{ fontSize: 9, fontWeight: 700 }}>{fmtShort(addDaysISO(lead.target_close_date, -3))}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0' }}>
+                                          <span style={{ fontSize: 9, color: 'var(--bt-text-dim)' }}>Final Walkthrough</span>
+                                          <span style={{ fontSize: 9, fontWeight: 700 }}>{fmtShort(addDaysISO(lead.target_close_date, -1))}</span>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                )
+                              })()}
+
+                              {/* ── Full Section 2 Checklist ── */}
+                              {TX_SECTIONS.map(section => {
+                                const checklist = (lead.tx_checklist ?? {}) as Record<string, boolean>
+                                const doneCount = section.items.filter(i => checklist[i.key]).length
+                                const allDone = doneCount === section.items.length
+                                return (
+                                  <div key={section.group} style={{ marginBottom: 6 }}>
+                                    {/* Group header */}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                                      <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--bt-text-dim)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                                        {section.group}
+                                      </span>
+                                      <span style={{ fontSize: 8, color: allDone ? '#4CAF50' : 'var(--bt-text-dim)', fontWeight: 600 }}>
+                                        {doneCount}/{section.items.length}
+                                      </span>
+                                    </div>
+                                    {/* Items */}
+                                    {section.items.map(item => {
+                                      const checked = !!checklist[item.key]
+                                      return (
+                                        <div
+                                          key={item.key}
+                                          onClick={async () => {
+                                            const updated = { ...(lead.tx_checklist ?? {}), [item.key]: !checked } as Record<string, boolean>
+                                            await onEditSave?.(lead.id, { tx_checklist: JSON.stringify(updated) })
+                                          }}
+                                          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '2px 0', cursor: 'pointer' }}
+                                        >
+                                          <span style={{
+                                            width: 10, height: 10, borderRadius: 2, flexShrink: 0,
+                                            border: checked ? '1px solid #4CAF50' : '1px solid var(--bt-border)',
+                                            background: checked ? '#4CAF50' : 'transparent',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            fontSize: 7, color: '#fff',
+                                          }}>
+                                            {checked ? '✓' : ''}
+                                          </span>
+                                          <span style={{ fontSize: 9, color: checked ? '#4CAF50' : 'var(--bt-text-dim)', textDecoration: checked ? 'line-through' : 'none' }}>
+                                            {item.label}
+                                          </span>
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )
+                              })}
                             </div>
                           )}
-
-                          {/* Milestones */}
-                          {[
-                            { key: 'milestone_inspection', label: 'Inspection', icon: '\uD83D\uDD0D' },
-                            { key: 'milestone_appraisal', label: 'Appraisal', icon: '\uD83D\uDCCA' },
-                            { key: 'milestone_financing', label: 'Financing', icon: '\uD83C\uDFE6' },
-                            { key: 'milestone_walkthrough', label: 'Final Walkthrough', icon: '\uD83D\uDEB6' },
-                          ].map(ms => {
-                            const done = !!(lead as unknown as Record<string, unknown>)[ms.key]
-                            return (
-                              <div
-                                key={ms.key}
-                                onClick={async () => {
-                                  await onEditSave?.(lead.id, { [ms.key]: (!done).toString() })
-                                }}
-                                style={{
-                                  display: 'flex', alignItems: 'center', gap: 5, padding: '2px 0',
-                                  cursor: 'pointer', fontSize: 10,
-                                  color: done ? '#4CAF50' : 'var(--bt-text-dim)',
-                                  textDecoration: done ? 'line-through' : 'none',
-                                }}
-                              >
-                                <span style={{
-                                  width: 12, height: 12, borderRadius: 2, flexShrink: 0,
-                                  border: done ? '1px solid #4CAF50' : '1px solid var(--bt-border)',
-                                  background: done ? '#4CAF50' : 'transparent',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  fontSize: 8, color: '#fff',
-                                }}>{done ? '\u2713' : ''}</span>
-                                <span>{ms.icon} {ms.label}</span>
-                              </div>
-                            )
-                          })}
                         </div>
                       )}
+                      {/* ─────────────────────────────────────────────── */}
 
                       {/* Action buttons row 1: Called, VM */}
                       <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 3 }}>
@@ -402,7 +561,6 @@ export default function PipelineBoard({ pipeline, onContact, onSelectLead, selec
                           style={editLeadId === lead.id ? { ...btnOutline, color: '#4CAF50', borderColor: '#4CAF50' } : btnOutline}>Edit</button>
                         <button onClick={(e) => { e.stopPropagation(); onContact?.(lead.id, lead.lead_name) }}
                           style={btnOutline}>Sleep</button>
-                        {/* Stage move buttons */}
                         {col.key !== 'active_client' && (
                           <button onClick={async (e) => { e.stopPropagation(); await onStageChange?.(lead.id, 'active_client') }}
                             style={{ ...btnOutline, color: '#FF9800', borderColor: '#FF9800' }}>Active</button>
@@ -420,6 +578,7 @@ export default function PipelineBoard({ pipeline, onContact, onSelectLead, selec
           </div>
         ))}
       </div>
+
       {/* Floating Appointment Setter */}
       {apptLead && (
         <>
