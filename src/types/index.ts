@@ -42,6 +42,11 @@ export interface ActivityLog {
   created_at: string
 }
 
+export interface ChecklistEntry {
+  done: boolean
+  date?: string   // YYYY-MM-DD when completed
+}
+
 export interface Pipeline {
   id: string
   agent_id: string
@@ -78,6 +83,9 @@ export interface Pipeline {
   effective_date?: string
   tx_checklist?: Record<string, boolean>
   tx_side?: 'buyer' | 'seller' | 'both'
+  // Compliance checklists with dates
+  pre_contract_checklist?: Record<string, ChecklistEntry>
+  post_close_checklist?: Record<string, ChecklistEntry>
   // Hot lead fields
   lead_source?: LeadSource
   hot_lead_type?: HotLeadType
