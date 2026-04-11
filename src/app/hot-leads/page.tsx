@@ -217,10 +217,23 @@ export default function HotLeadsPage() {
 
     // 3. Run skip trace via server-side API route (TRACERFY_API_KEY is server-only)
     const lead = leads.find(l => l.id === leadId)
-    const addrSource = lead?.property_address || lead?.lead_name || '' // property_address first — lead_name may be listing title not street address
+    // Smart address resolution — find the best real street address for Tracerfy
+    // property_address may just be a city ("kissimmee") — check it has a street number
+    const hasStreetNumber = (s?: string | null) => /\d/.test(s ?? '')
+    let addrSource = ''
+    if (hasStreetNumber(lead?.property_address)) {
+      addrSource = lead!.property_address!
+    } else if (lead?.notes) {
+      // Try to extract street address from notes/description text
+      // e.g. "Location: St Andrews Ct, Kissimmee, FL" or "4185 Scotland Rd, Kissimmee"
+      const notesMatch = lead.notes.match(/(?:location[:\s]+)?([\d]+[^,\n]+(?:st|ave|blvd|rd|ct|dr|ln|way|pl|cir|trail|terr?|pkwy)[^,\n]*,?\s*[A-Za-z\s]+,?\s*FL[\s\d]*)/i)
+        || lead.notes.match(/([A-Z][\w\s]+(?:St|Ave|Blvd|Rd|Ct|Dr|Ln|Way|Pl|Cir|Trail|Terr?|Pkwy)[\w\s,]*FL)/i)
+      if (notesMatch) addrSource = notesMatch[1].trim()
+    }
+    // Final fallback
+    if (!addrSource) addrSource = lead?.property_address || lead?.lead_name || ''
+
     if (lead && addrSource) {
-      // lead_name holds the full address e.g. "5314 E Kaley Street ORLANDO, FL 32812"
-      // Greedy match: capture everything before the last city token + FL
       const addrMatch = addrSource.match(/^(.+)\s+([A-Za-z]+(?:\s+[A-Za-z]+)*),?\s*FL\b/i)
       let streetAddress = addrSource
       let city = 'Orlando'
