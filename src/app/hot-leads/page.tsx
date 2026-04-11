@@ -217,7 +217,7 @@ export default function HotLeadsPage() {
 
     // 3. Run skip trace via server-side API route (TRACERFY_API_KEY is server-only)
     const lead = leads.find(l => l.id === leadId)
-    const addrSource = lead?.lead_name || lead?.property_address || ''
+    const addrSource = lead?.property_address || lead?.lead_name || '' // property_address first — lead_name may be listing title not street address
     if (lead && addrSource) {
       // lead_name holds the full address e.g. "5314 E Kaley Street ORLANDO, FL 32812"
       // Greedy match: capture everything before the last city token + FL
