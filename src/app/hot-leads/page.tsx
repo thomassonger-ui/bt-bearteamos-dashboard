@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { getSupabase } from '@/lib/supabase'
+import { skipTraceAddress } from '@/lib/skipTrace'   // ← NEW
 import type { Pipeline, HotLeadSource } from '@/types'
 import ResponsiveShell from '@/components/ResponsiveShell'
 import HotLeadCard from '@/components/HotLeadCard'
@@ -67,7 +68,6 @@ export default function HotLeadsPage() {
       if (lines.length < 2) { setUploadResult('CSV is empty.'); setUploading(false); return }
       const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''))
 
-      // Smart detection — find data by pattern, not header names
       function findInRow(vals: string[], test: (v: string) => boolean): string {
         for (const v of vals) { if (v && test(v.trim())) return v.trim() }
         return ''
@@ -79,20 +79,16 @@ export default function HotLeadsPage() {
 
       for (let i = 1; i < lines.length; i++) {
         const vals = parseCSVLine(lines[i])
-        if (vals.every(v => !v.trim())) continue // skip empty rows
+        if (vals.every(v => !v.trim())) continue
 
-        // Try named columns first
         const get = (keys: string[]) => { for (const k of keys) { const idx = headers.indexOf(k); if (idx >= 0 && vals[idx]) return vals[idx].trim() } return '' }
 
-        // Smart detect: address = contains street number + name pattern (handles "126 1st St", "712 19th Ave", etc.)
         let title = get(['address', 'title', 'name', 'lead_name', 'property', 'street'])
         if (!title) title = findInRow(vals, v => /^\d+\s+[\w]/.test(v) && !v.startsWith('http') && !v.startsWith('$') && !/^\d+$/.test(v.trim()) && v.length > 6 && v.length < 100 && /[A-Za-z]{2,}/.test(v))
 
-        // Smart detect: full address with city/state (e.g. "123 Main St, Orlando, FL 32801")
         let fullAddr = findInRow(vals, v => /\d+.*,\s*(Orlando|FL|Florida|Kissimmee|Sanford|Ocoee|Apopka|Winter Park|Altamonte|Lake Mary)/i.test(v))
         if (!title && fullAddr) title = fullAddr.split(',')[0].trim()
 
-        // Smart detect: address from URL path (fsbo.com format: /search/123-main-st-orlando-fl-32819)
         if (!title) {
           const urlVal = findInRow(vals, v => v.startsWith('http'))
           if (urlVal) {
@@ -111,32 +107,26 @@ export default function HotLeadsPage() {
 
         if (!title) { skipped++; continue }
 
-        // Smart detect: price = starts with $ or is a number > 5000
         let priceStr = get(['price', 'sale_price', 'asking_price', 'list_price'])
         if (!priceStr) priceStr = findInRow(vals, v => /^\$[\d,]+/.test(v))
         const price = priceStr ? parseFloat(priceStr.replace(/[$,]/g, '')) : undefined
-        if (price && price < 5000) { skipped++; continue } // skip obvious rentals (weekly/nightly rates)
+        if (price && price < 5000) { skipped++; continue }
 
-        // Smart detect: URL = starts with http
         let url = get(['url', 'link', 'listing_url', 'c11n href', 'block href'])
         if (!url) url = findInRow(vals, v => v.startsWith('http'))
 
-        // Detect source from URL
         if (url.includes('zillow.com')) detectedSource = 'zillow_fsbo'
         else if (url.includes('forsalebyowner.com')) detectedSource = 'forsalebyowner'
         else if (url.includes('fsbo.com')) detectedSource = 'fsbo_com'
         else if (url.includes('byowner.com')) detectedSource = 'byowner'
 
-        // Smart detect: location with FL
         let location = get(['location', 'city', 'neighborhood', 'area'])
         if (!location && fullAddr) location = fullAddr
         if (!location) location = findInRow(vals, v => /Orlando|FL|\d{5}/.test(v) && !v.startsWith('http') && !v.startsWith('$'))
 
-        // Smart detect: zip
         let zip = get(['zip', 'zipcode', 'zip_code', 'postal'])
         if (!zip) { const zipMatch = (fullAddr || location || '').match(/\b(3\d{4})\b/); if (zipMatch) zip = zipMatch[1] }
 
-        // Smart detect: beds/baths from any column
         const allText = vals.join(' ')
         const bedsMatch = allText.match(/(\d+)\s*(bed|bd|br)/i)
         const bathsMatch = allText.match(/([\d.]+)\s*(bath|ba)/i)
@@ -170,7 +160,6 @@ export default function HotLeadsPage() {
     finally { setUploading(false); e.target.value = '' }
   }
 
-  // Count how many leads this agent accepted today — per agent
   useEffect(() => {
     const agentId = sessionStorage.getItem('bt_agent_id') || 'default'
     const storedDate = sessionStorage.getItem(`bt_accept_date_${agentId}`)
@@ -185,6 +174,7 @@ export default function HotLeadsPage() {
     }
   }, [])
 
+  // ─── ACCEPT LEAD — now with automatic skip trace enrichment ──────────────────
   async function acceptLead(leadId: string) {
     if (acceptedToday >= MAX_DAILY) return
     const remaining = MAX_DAILY - acceptedToday
@@ -195,17 +185,44 @@ export default function HotLeadsPage() {
       `This lead will be added to your pipeline. Continue?`
     )
     if (!confirmed) return
+
     const agentId = sessionStorage.getItem('bt_agent_id')
     if (!agentId) return
+
+    // 1. Move lead into agent's pipeline immediately
     await getSupabase()
       .from('pipeline')
       .update({ agent_id: agentId, stage: 'new_lead', is_hot_lead: false })
       .eq('id', leadId)
+
+    // 2. Update daily counter
     const aid = sessionStorage.getItem('bt_agent_id') || 'default'
     const newCount = acceptedToday + 1
     setAcceptedToday(newCount)
     sessionStorage.setItem(`bt_accept_count_${aid}`, newCount.toString())
     sessionStorage.setItem(`bt_accept_date_${aid}`, new Date().toDateString())
+
+    // 3. Run skip trace in background — enrich with owner name, phone, email
+    const lead = leads.find(l => l.id === leadId)
+    if (lead?.property_address) {
+      const cityMatch = lead.property_address.match(/([A-Za-z\s]+),?\s*FL/i)
+      const city = cityMatch?.[1]?.trim() ?? 'Orlando'
+
+      skipTraceAddress(lead.property_address, city, 'FL', lead.zip_code ?? undefined)
+        .then(async (trace) => {
+          if (!trace) return
+          const updates: Record<string, string> = {}
+          if (trace.owner_name && !lead.lead_name) updates.lead_name = trace.owner_name
+          if (trace.phone1 && !lead.phone)          updates.phone    = trace.phone1
+          if (trace.email  && !lead.email)           updates.email    = trace.email
+          if (Object.keys(updates).length > 0) {
+            await getSupabase().from('pipeline').update(updates).eq('id', leadId)
+            console.log('[skipTrace] Enriched lead:', leadId, updates)
+          }
+        })
+        .catch(err => console.error('[skipTrace] Background enrichment failed:', err))
+    }
+
     fetchLeads()
   }
 
@@ -252,13 +269,12 @@ export default function HotLeadsPage() {
     }).length,
   }
 
-  // Unique lead types from data
   const leadTypes = [...new Set(leads.map(l => l.hot_lead_type).filter(Boolean))]
 
   return (
     <ResponsiveShell>
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-        {/* Disclaimer banner — fixed at top */}
+        {/* Disclaimer banner */}
         <div style={{
           padding: '8px 32px', background: 'rgba(224,82,82,0.08)',
           borderBottom: '1px solid rgba(224,82,82,0.2)',
@@ -316,7 +332,7 @@ export default function HotLeadsPage() {
             <div style={{ fontSize: 40 }}>&#128274;</div>
             <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--bt-text)' }}>Daily Limit Reached</div>
             <div style={{ fontSize: 13, color: 'var(--bt-text-dim)', textAlign: 'center', maxWidth: 400 }}>
-              You have accepted {MAX_DAILY} leads today. New leads will be available in 24 hours. Leads refresh automatically — no passcode needed.
+              You have accepted {MAX_DAILY} leads today. New leads will be available in 24 hours.
             </div>
             <div style={{ fontSize: 12, color: 'var(--bt-muted)', marginTop: 8 }}>
               {acceptedToday}/{MAX_DAILY} leads accepted today
@@ -326,17 +342,11 @@ export default function HotLeadsPage() {
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 32px 24px', minHeight: 0 }}>
         <div className="m-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 24, alignItems: 'start' }}>
         <div>
-        {/* Header */}
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--bt-text)', marginBottom: 4 }}>
-            Hot Leads
-          </h1>
-          <p style={{ fontSize: 12, color: 'var(--bt-text-dim)' }}>
-            Automated lead pipeline from Apify scrapers
-          </p>
+          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--bt-text)', marginBottom: 4 }}>Hot Leads</h1>
+          <p style={{ fontSize: 12, color: 'var(--bt-text-dim)' }}>Automated lead pipeline from Apify scrapers</p>
         </div>
 
-        {/* Stats Bar */}
         <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
           {[
             { label: 'Total Leads', value: stats.total, color: 'var(--bt-accent)' },
@@ -348,74 +358,42 @@ export default function HotLeadsPage() {
               flex: 1, padding: '14px 18px', background: 'var(--bt-surface)',
               border: '1px solid var(--bt-border)', borderRadius: 6,
             }}>
-              <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
-                {s.label}
-              </div>
+              <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>{s.label}</div>
               <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
             </div>
           ))}
         </div>
 
-        {/* Filters */}
         <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-          <select
-            value={filterSource}
-            onChange={e => setFilterSource(e.target.value)}
-            style={selectStyle}
-          >
+          <select value={filterSource} onChange={e => setFilterSource(e.target.value)} style={selectStyle}>
             <option value="">All Sources</option>
-            {Object.entries(SOURCE_LABEL).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
-            ))}
+            {Object.entries(SOURCE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
-
-          <select
-            value={filterUrgency}
-            onChange={e => setFilterUrgency(e.target.value)}
-            style={selectStyle}
-          >
+          <select value={filterUrgency} onChange={e => setFilterUrgency(e.target.value)} style={selectStyle}>
             <option value="">All Urgency</option>
             <option value="critical">Critical</option>
             <option value="high">High</option>
             <option value="normal">Normal</option>
             <option value="low">Low</option>
           </select>
-
-          <select
-            value={filterType}
-            onChange={e => setFilterType(e.target.value)}
-            style={selectStyle}
-          >
+          <select value={filterType} onChange={e => setFilterType(e.target.value)} style={selectStyle}>
             <option value="">All Types</option>
-            {leadTypes.map(t => (
-              <option key={t} value={t!}>{t!.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
-            ))}
+            {leadTypes.map(t => <option key={t} value={t!}>{t!.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>)}
           </select>
-
           {(filterSource || filterUrgency || filterType) && (
-            <button
-              onClick={() => { setFilterSource(''); setFilterUrgency(''); setFilterType('') }}
-              style={{ fontSize: 11, padding: '6px 12px', border: '1px solid var(--bt-border)', background: 'transparent', color: 'var(--bt-text-dim)', borderRadius: 4, cursor: 'pointer' }}
-            >
+            <button onClick={() => { setFilterSource(''); setFilterUrgency(''); setFilterType('') }}
+              style={{ fontSize: 11, padding: '6px 12px', border: '1px solid var(--bt-border)', background: 'transparent', color: 'var(--bt-text-dim)', borderRadius: 4, cursor: 'pointer' }}>
               Clear Filters
             </button>
           )}
         </div>
 
-        {/* Lead List */}
         {loading ? (
-          <div style={{ color: 'var(--bt-text-dim)', fontSize: 13, padding: 40, textAlign: 'center' }}>
-            Loading hot leads...
-          </div>
+          <div style={{ color: 'var(--bt-text-dim)', fontSize: 13, padding: 40, textAlign: 'center' }}>Loading hot leads...</div>
         ) : sorted.length === 0 ? (
-          <div style={{
-            padding: 40, textAlign: 'center', background: 'var(--bt-surface)',
-            border: '1px solid var(--bt-border)', borderRadius: 6,
-          }}>
+          <div style={{ padding: 40, textAlign: 'center', background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6 }}>
             <div style={{ fontSize: 14, color: 'var(--bt-text-dim)', marginBottom: 8 }}>No hot leads yet</div>
-            <div style={{ fontSize: 12, color: 'var(--bt-text-dim)' }}>
-              Connect your Apify scrapers via n8n to start receiving leads
-            </div>
+            <div style={{ fontSize: 12, color: 'var(--bt-text-dim)' }}>Connect your Apify scrapers via n8n to start receiving leads</div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -433,13 +411,11 @@ export default function HotLeadsPage() {
           </div>
         )}
 
-        {/* Source Health Panel */}
         <div style={{ marginTop: 32 }}>
           <HotLeadSourcePanel sources={sources} />
         </div>
-        </div>{/* end LEFT */}
+        </div>
 
-        {/* ═══ RIGHT: Sources & Schedule ═══ */}
         <div style={{ position: 'sticky', top: 24 }}>
           <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '16px', marginBottom: 12 }}>
             <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10 }}>Schedule</div>
@@ -450,51 +426,31 @@ export default function HotLeadsPage() {
               { label: 'FSBO.com', schedule: 'Manual CSV upload', active: true },
               { label: 'ByOwner.com', schedule: 'Manual CSV upload', active: true },
             ].map(s => (
-              <div key={s.label} style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '8px 0', borderBottom: '1px solid var(--bt-border)',
-                opacity: s.active ? 1 : 0.4,
-              }}>
+              <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--bt-border)', opacity: s.active ? 1 : 0.4 }}>
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 500 }}>{s.label}</div>
                   <div style={{ fontSize: 10, color: 'var(--bt-text-dim)' }}>{s.schedule}</div>
                 </div>
-                <span style={{
-                  fontSize: 8, fontWeight: 600, padding: '2px 5px', borderRadius: 2,
-                  background: s.active ? 'rgba(76,175,80,0.15)' : 'rgba(224,82,82,0.15)',
-                  color: s.active ? '#4CAF50' : '#E04E4E',
-                }}>{s.active ? 'ACTIVE' : 'OFF'}</span>
+                <span style={{ fontSize: 8, fontWeight: 600, padding: '2px 5px', borderRadius: 2, background: s.active ? 'rgba(76,175,80,0.15)' : 'rgba(224,82,82,0.15)', color: s.active ? '#4CAF50' : '#E04E4E' }}>{s.active ? 'ACTIVE' : 'OFF'}</span>
               </div>
             ))}
           </div>
 
-          {/* Source Stats */}
           <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '16px' }}>
             <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10 }}>Leads by Source</div>
-            {Object.entries({
-              craigslist: 'Craigslist',
-              zillow_fsbo: 'Zillow FSBO',
-              forsalebyowner: 'ForSaleByOwner',
-              fsbo_com: 'FSBO.com',
-              byowner: 'ByOwner.com',
-              manual_upload: 'Manual',
-            }).map(([key, label]) => {
+            {Object.entries({ craigslist: 'Craigslist', zillow_fsbo: 'Zillow FSBO', forsalebyowner: 'ForSaleByOwner', fsbo_com: 'FSBO.com', byowner: 'ByOwner.com', manual_upload: 'Manual' }).map(([key, label]) => {
               const count = leads.filter(l => l.lead_source === key).length
               return (
-                <div key={key} style={{
-                  display: 'flex', justifyContent: 'space-between',
-                  padding: '6px 0', borderBottom: '1px solid var(--bt-border)',
-                  fontSize: 12,
-                }}>
+                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--bt-border)', fontSize: 12 }}>
                   <span style={{ color: count > 0 ? 'var(--bt-text)' : 'var(--bt-muted)' }}>{label}</span>
                   <span style={{ fontWeight: 600, color: count > 0 ? 'var(--bt-accent)' : 'var(--bt-muted)' }}>{count}</span>
                 </div>
               )
             })}
           </div>
-        </div>{/* end RIGHT */}
+        </div>
 
-        </div>{/* end grid */}
+        </div>
         </div>
         </>)}
       </main>
@@ -511,4 +467,3 @@ const selectStyle: React.CSSProperties = {
   color: 'var(--bt-text)',
   cursor: 'pointer',
 }
-
