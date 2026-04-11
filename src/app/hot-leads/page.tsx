@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { getSupabase } from '@/lib/supabase'
-import type { Pipeline, HotLeadSource } from '@/types'
+import type { Pipeline, HotLeadSource, Agent } from '@/types'
+import { getAllAgents } from '@/lib/queries'
 import ResponsiveShell from '@/components/ResponsiveShell'
 import HotLeadCard from '@/components/HotLeadCard'
 import HotLeadSourcePanel from '@/components/HotLeadSourcePanel'
@@ -33,13 +34,18 @@ export default function HotLeadsPage() {
   const [loading, setLoading] = useState(true)
   const [acceptedToday, setAcceptedToday] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [agents, setAgents] = useState<Agent[]>([])
   const [showUpload, setShowUpload] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadResult, setUploadResult] = useState<string | null>(null)
   const MAX_DAILY = 2
 
   useEffect(() => {
-    setIsAdmin(sessionStorage.getItem('bt_is_admin') === 'true')
+    const admin = sessionStorage.getItem('bt_is_admin') === 'true'
+    setIsAdmin(admin)
+    if (admin) {
+      getAllAgents().then(setAgents)
+    }
   }, [])
 
   function parseCSVLine(line: string): string[] {
@@ -173,14 +179,22 @@ export default function HotLeadsPage() {
     }
   }, [])
 
+  // ─── TRANSFER LEAD — admin only, reassigns lead to a specific agent ──────────
+  async function transferLead(leadId: string, agentId: string) {
+    await getSupabase()
+      .from('pipeline')
+      .update({ agent_id: agentId, stage: 'new_lead', is_hot_lead: false })
+      .eq('id', leadId)
+    fetchLeads()
+  }
+
   // ─── ACCEPT LEAD — now with automatic skip trace enrichment ──────────────────
   async function acceptLead(leadId: string) {
-    if (acceptedToday >= MAX_DAILY) return
+    if (!isAdmin && acceptedToday >= MAX_DAILY) return
     const remaining = MAX_DAILY - acceptedToday
     const confirmed = window.confirm(
       `You are about to accept this lead.\n\n` +
-      `You have ${remaining} lead${remaining !== 1 ? 's' : ''} remaining today.\n` +
-      `After accepting ${MAX_DAILY} leads, this page will lock for 24 hours.\n\n` +
+      (!isAdmin ? `You have ${remaining} lead${remaining !== 1 ? 's' : ''} remaining today.\nAfter accepting ${MAX_DAILY} leads, this page will lock for 24 hours.\n\n` : '') +
       `This lead will be added to your pipeline. Continue?`
     )
     if (!confirmed) return
@@ -330,7 +344,7 @@ export default function HotLeadsPage() {
           </div>
         )}
 
-        {acceptedToday >= MAX_DAILY ? (
+        {!isAdmin && acceptedToday >= MAX_DAILY ? (
           <div style={{
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexDirection: 'column', gap: 12, padding: 40,
@@ -411,7 +425,9 @@ export default function HotLeadsPage() {
                 sourceLabel={SOURCE_LABEL[lead.lead_source ?? ''] ?? lead.lead_source ?? ''}
                 onRefresh={fetchLeads}
                 onAccept={acceptLead}
-                canAccept={acceptedToday < MAX_DAILY}
+                canAccept={isAdmin || acceptedToday < MAX_DAILY}
+                agents={isAdmin ? agents : undefined}
+                onTransfer={isAdmin ? transferLead : undefined}
               />
             ))}
           </div>
