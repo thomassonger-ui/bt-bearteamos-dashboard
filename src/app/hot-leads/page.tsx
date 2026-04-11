@@ -287,7 +287,7 @@ export default function HotLeadsPage() {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0,
         }}>
           <span style={{ fontSize: 11, color: '#E04E4E', fontWeight: 600 }}>
-            Only {MAX_DAILY} Leads Per Day &middot; Leads refresh every 24 hours
+            {MAX_DAILY} Leads Per Day &middot; 24-Hour Reset &middot; Once a lead is accepted, owner name, phone &amp; email will appear in Pipeline
           </span>
           <span style={{ fontSize: 11, color: 'var(--bt-text-dim)' }}>
             {acceptedToday}/{MAX_DAILY} accepted today
