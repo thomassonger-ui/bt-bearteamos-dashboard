@@ -74,6 +74,10 @@ export interface Pipeline {
   milestone_appraisal?: boolean
   milestone_financing?: boolean
   milestone_walkthrough?: boolean
+  // Transaction tracker (effective date driven)
+  effective_date?: string
+  tx_checklist?: Record<string, boolean>
+  tx_side?: 'buyer' | 'seller' | 'both'
   // Hot lead fields
   lead_source?: LeadSource
   hot_lead_type?: HotLeadType
