@@ -327,6 +327,26 @@ export default function EscrowPanel({ lead, isAdmin, userName, onSave }: Props) 
             </div>
           )}
 
+          {/* View Proof — visible to everyone when proof is uploaded */}
+          {lead.escrow_proof_uploaded && lead.escrow_proof_url && (
+            <div style={{ marginBottom: 6 }}>
+              <a
+                href={lead.escrow_proof_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  fontSize: 10, fontWeight: 600, color: '#4CAF50',
+                  textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '3px 8px', borderRadius: 3,
+                  border: '1px solid rgba(76,175,80,0.4)',
+                  background: 'rgba(76,175,80,0.08)',
+                }}
+              >
+                ✓ View Proof of Deposit
+              </a>
+            </div>
+          )}
+
           {/* Audit log */}
           <div>
             <button onClick={() => setShowLog(v => !v)} style={{ background: 'transparent', border: 'none', fontSize: 8, color: 'var(--bt-text-dim)', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}>
