@@ -74,7 +74,7 @@ export async function skipTraceAddress(
       : undefined
 
     return {
-      owner_name: person.full_name ?? `${person.first_name ?? ''} ${person.last_name ?? ''}`.trim() || undefined,
+      owner_name: (person.full_name ?? `${person.first_name ?? ''} ${person.last_name ?? ''}`.trim()) || undefined,
       phone1: phones[0],
       phone2: phones[1],
       phone3: phones[2],
