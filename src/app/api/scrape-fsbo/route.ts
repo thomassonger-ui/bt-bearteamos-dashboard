@@ -56,6 +56,9 @@ interface Lead {
   url: string
   source: string
   description?: string
+  phone?: string
+  email?: string
+  sellerName?: string
 }
 
 // ─── CRAIGSLIST ORLANDO FSBO ────────────────────────────────────────────────
@@ -128,6 +131,14 @@ async function scrapeCraigslist(): Promise<Lead[]> {
         const finalAddress = fullAddress || (streetAddr ? `${streetAddr}, Orlando, FL ${zip}` : item.location)
         const finalTitle = streetAddr || item.title
 
+        // Extract phone from description body
+        const phoneMatch = description.match(/\b(\d{3}[-.]?\d{3}[-.]?\d{4})\b/)
+        const extractedPhone = phoneMatch?.[1] || undefined
+
+        // Extract Craigslist anonymized reply email
+        const emailMatch = detailHtml.match(/href="mailto:([^"]+)"/)
+        const extractedEmail = emailMatch?.[1] || undefined
+
         leads.push({
           title: finalTitle,
           price: item.price,
@@ -135,6 +146,9 @@ async function scrapeCraigslist(): Promise<Lead[]> {
           url: detailUrl,
           source: 'craigslist',
           description: description || (beds ? `${beds} bed, ${baths} bath` : undefined),
+          phone: extractedPhone,
+          email: extractedEmail,
+          sellerName: undefined,
         })
       } catch {
         leads.push({ ...item, source: 'craigslist' })
@@ -330,12 +344,16 @@ export async function GET() {
       .limit(1)
     if (existing && existing.length > 0) { skipped++; continue }
 
-    // Insert
+    // Insert — use address as lead_name (more meaningful than listing title)
+    const leadName = (lead as any).sellerName
+      || lead.location?.split(',')[0]?.trim()
+      || lead.title.slice(0, 100)
+
     const { error } = await supabase
       .from('pipeline')
       .insert({
         agent_id: DEFAULT_AGENT_ID,
-        lead_name: lead.title.slice(0, 100),
+        lead_name: leadName.slice(0, 100),
         stage: 'new_lead',
         last_contact: now,
         notes: lead.description || null,
@@ -343,6 +361,8 @@ export async function GET() {
         urgency: classifyUrgency(`${lead.title} ${lead.description || ''}`),
         arv: lead.price || null,
         property_address: lead.location || null,
+        phone: (lead as any).phone || null,
+        email: (lead as any).email || null,
         source_url: lead.url || null,
         source_id: sourceId,
         scraped_at: now,
