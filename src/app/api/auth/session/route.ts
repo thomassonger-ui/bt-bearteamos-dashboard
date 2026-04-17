@@ -28,14 +28,28 @@ export async function POST(req: Request) {
     const is_admin = is_super_admin || adminEmails.includes(email)
 
     const sessionToken = process.env.SESSION_TOKEN ?? ''
-    const res = NextResponse.json({ ok: true, is_admin, is_super_admin })
-    res.cookies.set('bt_session', sessionToken, {
+    const cookieOpts = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: 'lax' as const,
       path: '/',
       maxAge: 60 * 60 * 24 * 7,
-    })
+    }
+
+    const res = NextResponse.json({ ok: true, is_admin, is_super_admin })
+
+    // Session cookie — required for all protected routes
+    res.cookies.set('bt_session', sessionToken, cookieOpts)
+
+    // Admin cookie — httpOnly, server-set, checked by middleware for /broker access
+    // Never readable by client JS — prevents tampering
+    if (is_admin) {
+      res.cookies.set('bt_admin', 'true', cookieOpts)
+    } else {
+      // Explicitly clear any stale admin cookie on non-admin login
+      res.cookies.set('bt_admin', '', { ...cookieOpts, maxAge: 0 })
+    }
+
     return res
   } catch (err) {
     console.error('[auth/session]', err)
