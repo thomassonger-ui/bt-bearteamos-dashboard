@@ -372,11 +372,58 @@ Sarah Kim,sarah@example.com,321-555-5678,eXp Realty,8`}
           <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--bt-text-dim)', textTransform: 'uppercase', marginBottom: 8, borderBottom: '2px solid var(--bt-border)', paddingBottom: 6 }}>
             Other ({unmatched.length})
           </div>
-          {unmatched.map(lead => (
-            <div key={lead.id} style={{ padding: '8px 14px', background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, marginBottom: 4, fontSize: 12 }}>
-              {lead.name} &middot; {lead.email || 'No email'} &middot; Stage: {lead.stage || lead.status || 'unknown'}
-            </div>
-          ))}
+          {unmatched.map(lead => {
+            const expanded = expandedId === lead.id
+            const stage = lead.stage || lead.status || 'new_lead'
+            const d = daysSince(lead.created_at)
+            return (
+              <div key={lead.id} style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, marginBottom: 6, overflow: 'hidden' }}>
+                {/* Header */}
+                <div onClick={() => setExpandedId(expanded ? null : lead.id)} style={{ padding: '10px 14px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{lead.name}</div>
+                    <div style={{ fontSize: 11, color: 'var(--bt-text-dim)' }}>
+                      {lead.email || 'No email'} &middot; Stage: {lead.stage || lead.status || 'unknown'} &middot; {d}d ago
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 12, color: 'var(--bt-text-dim)' }}>{expanded ? '\u25B2' : '\u25BC'}</span>
+                </div>
+                {/* Expanded */}
+                {expanded && (
+                  <div style={{ padding: '0 14px 14px', borderTop: '1px solid var(--bt-border)' }}>
+                    <div style={{ padding: '10px 0', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 11 }}>
+                      <div><span style={{ color: 'var(--bt-text-dim)' }}>Email:</span> {lead.email || '\u2014'}</div>
+                      <div><span style={{ color: 'var(--bt-text-dim)' }}>Phone:</span> {lead.phone || '\u2014'}</div>
+                      <div><span style={{ color: 'var(--bt-text-dim)' }}>Source:</span> {lead.source || lead.entry_type || '\u2014'}</div>
+                      <div><span style={{ color: 'var(--bt-text-dim)' }}>Tier:</span> {lead.tier || '\u2014'}</div>
+                      <div><span style={{ color: 'var(--bt-text-dim)' }}>Avg Price:</span> {lead.avg_price ? `$${lead.avg_price.toLocaleString()}` : '\u2014'}</div>
+                      <div><span style={{ color: 'var(--bt-text-dim)' }}>Top Objection:</span> {lead.top_objection || '\u2014'}</div>
+                    </div>
+                    {lead.notes && (
+                      <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginBottom: 10, lineHeight: 1.4 }}>{lead.notes}</div>
+                    )}
+                    <div style={{ marginBottom: 10 }}>
+                      <select value={stage} onChange={async (e) => { await onStageChange(lead.id, e.target.value) }}
+                        style={{ padding: '6px 10px', fontSize: 11, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', color: 'var(--bt-text)', borderRadius: 4, outline: 'none', width: '100%' }}>
+                        {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <button onClick={() => onDraftOutreach(lead)} style={{ fontSize: 11, padding: '6px 12px', fontWeight: 600, background: 'var(--bt-accent)', color: 'var(--bt-black)', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Draft Outreach</button>
+                      {onDelete && (
+                        <button onClick={async () => {
+                          if (!confirm(`Delete ${lead.name}? This cannot be undone.`)) return
+                          await onDelete(lead.id)
+                        }} style={{ fontSize: 11, padding: '6px 12px', fontWeight: 600, background: '#E04E4E', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>Delete</button>
+                      )}
+                      {lead.phone && <a href={`tel:${lead.phone.replace(/\D/g, '')}`} style={{ fontSize: 11, padding: '6px 12px', fontWeight: 600, background: '#1976D2', color: '#fff', borderRadius: 4, textDecoration: 'none' }}>Call</a>}
+                      {lead.email && <a href={`mailto:${lead.email}`} style={{ fontSize: 11, padding: '6px 12px', fontWeight: 600, background: 'var(--bt-border)', color: 'var(--bt-text-dim)', borderRadius: 4, textDecoration: 'none' }}>Email</a>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
@@ -388,3 +435,4 @@ const inpSt: React.CSSProperties = {
   background: 'var(--bt-surface)', border: '1px solid var(--bt-border)',
   color: 'var(--bt-text)', borderRadius: 4, outline: 'none', fontFamily: 'inherit',
 }
+
