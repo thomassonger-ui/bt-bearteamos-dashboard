@@ -97,7 +97,8 @@ export default function HotLeadsPage() {
 
         // ─── TITLE DETECTION ────────────────────────────────────────────────
         let title = get(['address', 'title', 'name', 'lead_name', 'property', 'street',
-                         'property address', 'listing title', 'listing address', 'location'])
+                         'property address', 'listing title', 'listing address', 'location',
+                         'card-text', 'card text'])
 
         // Any column starting with a digit (street number = address)
         if (!title) title = findInRow(vals, v =>
@@ -149,13 +150,13 @@ export default function HotLeadsPage() {
         if (!title) { clientSkipped++; continue }
 
         // ─── PRICE ──────────────────────────────────────────────────────────
-        let priceStr = get(['price', 'sale_price', 'asking_price', 'list_price', 'asking price', 'list price'])
+        let priceStr = get(['price', 'sale_price', 'asking_price', 'list_price', 'asking price', 'list price', 'card-title', 'card title'])
         if (!priceStr) priceStr = findInRow(vals, v => /^\$[\d,]+/.test(v))
         const price = priceStr ? parseFloat(priceStr.replace(/[$,]/g, '')) : undefined
         if (price && price < 5000) { clientSkipped++; continue }
 
         // ─── URL / SOURCE ────────────────────────────────────────────────────
-        let url = get(['url', 'link', 'listing_url', 'listing url', 'c11n href', 'block href', 'href', 'source url'])
+        let url = get(['url', 'link', 'listing_url', 'listing url', 'c11n href', 'block href', 'href', 'source url', 'card href', 'card-href'])
         if (!url) url = findInRow(vals, v => v.startsWith('http'))
 
         if (url.includes('zillow.com')) detectedSource = 'zillow_fsbo'
