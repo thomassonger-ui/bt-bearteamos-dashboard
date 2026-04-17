@@ -1,18 +1,24 @@
 // ─── DB Row types (match Supabase column names exactly) ─────────────────────
 
+export interface EscrowLogEntry {
+  ts: string      // ISO timestamp — immutable once written
+  user: string    // agent name or 'Admin'
+  action: string  // description of action taken
+}
+
 export interface Agent {
   id: string
   name: string
   email: string
   phone?: string
-  username?: string           // BearTeamOS login username
-  stage: string               // existing column: 'Onboarding' | 'Active' etc
-  onboarding_stage: number    // days into onboarding (0–90+)
-  last_active: string         // ISO timestamp
-  inactivity_streak: number   // consecutive days inactive (≥24h each)
-  missed_streak: number       // consecutive engine runs with ≥2 missed tasks in 48h
-  performance_score: number   // 0–100, calculated each engine run
-  last_score_update?: string  // ISO timestamp of last score calculation
+  username?: string
+  stage: string
+  onboarding_stage: number
+  last_active: string
+  inactivity_streak: number
+  missed_streak: number
+  performance_score: number
+  last_score_update?: string
   start_date?: string
   created_at: string
   updated_at?: string
@@ -25,11 +31,11 @@ export interface Task {
   title: string
   description: string
   status: 'pending' | 'completed' | 'missed' | 'overdue'
-  due_date: string            // ISO timestamp
+  due_date: string
   completed_at?: string
   created_at: string
-  source_rule?: string        // which engine rule created this task
-  source_ref?: string         // entity that triggered it (lead_id, date, task_id)
+  source_rule?: string
+  source_ref?: string
 }
 
 export interface ActivityLog {
@@ -42,6 +48,11 @@ export interface ActivityLog {
   created_at: string
 }
 
+export interface ChecklistEntry {
+  done: boolean
+  date?: string
+}
+
 export interface Pipeline {
   id: string
   agent_id: string
@@ -51,7 +62,7 @@ export interface Pipeline {
   phone?: string
   email?: string
   address?: string
-  last_contact: string              // ISO timestamp
+  last_contact: string
   notes?: string
   created_at: string
   scout_session_id?: string
@@ -63,7 +74,7 @@ export interface Pipeline {
   last_engagement_update?: string
   brokerage?: string
   enrichment_status?: 'complete' | 'failed' | 'pending' | null
-  // Commission fields
+  // Commission
   closed_date?: string
   sale_price?: number
   commission_rate?: number
@@ -74,6 +85,25 @@ export interface Pipeline {
   milestone_appraisal?: boolean
   milestone_financing?: boolean
   milestone_walkthrough?: boolean
+  // Transaction tracker
+  effective_date?: string
+  tx_checklist?: Record<string, boolean>
+  tx_side?: 'buyer' | 'seller' | 'both'
+  // Compliance checklists with dates
+  pre_contract_checklist?: Record<string, ChecklistEntry>
+  post_close_checklist?: Record<string, ChecklistEntry>
+  // ─── Escrow Compliance ───────────────────────────────────────────────────
+  escrow_holder?: string                                    // title company / attorney
+  escrow_amount?: number                                    // EMD amount
+  escrow_due_date?: string                                  // auto-calc: eff date + 3 days
+  escrow_received_date?: string                             // when agent received EMD
+  escrow_deposit_date?: string                              // when deposited into escrow account
+  escrow_proof_uploaded?: boolean                           // proof of deposit on file
+  escrow_proof_url?: string                                 // URL to uploaded proof doc
+  escrow_status?: 'pending' | 'deposited' | 'disputed' | 'released'
+  escrow_release_doc_url?: string                           // mutual release / closing statement
+  escrow_dispute_at?: string                                // ISO timestamp when dispute flagged
+  escrow_log?: EscrowLogEntry[]                             // append-only audit trail
   // Hot lead fields
   lead_source?: LeadSource
   hot_lead_type?: HotLeadType
@@ -166,8 +196,6 @@ export interface RecruitLead {
   updated_at?: string
 }
 
-// ─── Campaign Pipeline Lead ───────────────────────────────────────────────────
-
 export interface Lead {
   id: string
   name: string
@@ -179,8 +207,6 @@ export interface Lead {
   lastContactedAt: string | null
   createdAt: string
 }
-
-// ─── UI helpers ──────────────────────────────────────────────────────────────
 
 export type TaskStatus = Task['status']
 export type TaskType = string
