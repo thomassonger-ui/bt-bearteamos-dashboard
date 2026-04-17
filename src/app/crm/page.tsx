@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import ResponsiveShell from '@/components/ResponsiveShell'
 import { getSupabase } from '@/lib/supabase'
-import { getAgent, getFirstAgent, getPipeline, insertHotLead } from '@/lib/queries'
+import { getAgent, getFirstAgent, getCRMContacts, insertHotLead } from '@/lib/queries'
 import type { Agent, Pipeline } from '@/types'
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
@@ -20,11 +20,15 @@ export default function CRMPage() {
   const [editData, setEditData] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
+  async function loadContacts(agentId: string) {
+    setContacts(await getCRMContacts(agentId))
+  }
+
   async function saveEdit() {
     if (!editId || saving) return
     setSaving(true)
     await getSupabase().from('pipeline').update(editData).eq('id', editId)
-    if (agent) setContacts(await getPipeline(agent.id))
+    if (agent) await loadContacts(agent.id)
     setEditId(null)
     setSaving(false)
   }
@@ -32,14 +36,15 @@ export default function CRMPage() {
   async function hibernateContact(id: string) {
     if (!window.confirm('Hibernate this contact? They will be moved to "stalled" stage.')) return
     await getSupabase().from('pipeline').update({ stage: 'stalled' }).eq('id', id)
-    if (agent) setContacts(await getPipeline(agent.id))
+    if (agent) await loadContacts(agent.id)
   }
 
-  async function deleteContact(id: string, name: string) {
-    if (!window.confirm(`Delete ${name}? This cannot be undone.`)) return
-    await getSupabase().from('pipeline').delete().eq('id', id)
-    if (agent) setContacts(await getPipeline(agent.id))
+  async function removeFromCRM(id: string, name: string) {
+    if (!window.confirm(`Remove ${name} from CRM? They stay in Pipeline but won't appear here.`)) return
+    await getSupabase().from('pipeline').update({ in_crm: false }).eq('id', id)
+    if (agent) await loadContacts(agent.id)
   }
+
   const [showImport, setShowImport] = useState(false)
   const [importStatus, setImportStatus] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
@@ -98,12 +103,13 @@ export default function CRMPage() {
           stage: get('stage') || 'new_lead',
           notes: get('notes') || undefined,
           last_contact: new Date().toISOString(),
-        })
+          in_crm: true,
+          is_hot_lead: false,
+        } as Parameters<typeof insertHotLead>[0] & { in_crm: boolean })
         added++
       }
       setImportStatus(`Imported ${added} contact${added !== 1 ? 's' : ''}${skipped > 0 ? `, ${skipped} skipped` : ''}.`)
-      // Refresh contacts
-      setContacts(await getPipeline(agent.id))
+      await loadContacts(agent.id)
     } catch (err) {
       setImportStatus('Error reading CSV file.')
     } finally {
@@ -136,12 +142,12 @@ export default function CRMPage() {
       const storedId = sessionStorage.getItem('bt_agent_id')
       const agentData = storedId ? await getAgent(storedId) : await getFirstAgent()
       if (!agentData) { setLoading(false); return }
-      const pipeline = await getPipeline(agentData.id)
       setAgent(agentData)
-      setContacts(pipeline)
+      await loadContacts(agentData.id)
       setLoading(false)
     }
     load()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const filtered = useMemo(() => {
@@ -208,6 +214,7 @@ export default function CRMPage() {
             <div>
               <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: 2 }}>Contact Book</div>
               <div style={{ fontSize: 17, fontWeight: 700 }}>{agent?.name ?? '\u2014'}&apos;s CRM</div>
+              <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', marginTop: 2 }}>Only contacts you&apos;ve added from Pipeline</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 12, color: 'var(--bt-text-dim)' }}>{filtered.length} contact{filtered.length !== 1 ? 's' : ''}</span>
@@ -265,14 +272,8 @@ export default function CRMPage() {
               <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>email</code>,{' '}
               <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>address</code>,{' '}
               <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>stage</code>,{' '}
-              <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>notes</code><br />
-              <strong>Example CSV:</strong>
+              <code style={{ background: 'var(--bt-surface)', padding: '1px 4px', borderRadius: 2 }}>notes</code>
             </div>
-            <pre style={{ fontSize: 10, color: 'var(--bt-text)', background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 4, padding: '8px 12px', overflowX: 'auto', marginBottom: 10 }}>
-{`lead_name,lead_type,phone,email,address,stage,notes
-Sarah Mitchell,buyer,407-555-0192,sarah@example.com,Winter Park FL,new_lead,Looking for 3/2 under 400K
-James Carter,seller,321-555-8834,james@example.com,123 Oak St Orlando,contacted,Wants to list in May`}
-            </pre>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <label style={{
                 fontSize: 11, padding: '6px 14px', fontWeight: 600,
@@ -322,9 +323,17 @@ James Carter,seller,321-555-8834,james@example.com,123 Oak St Orlando,contacted,
 
           {/* Contact list */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
-            {Object.keys(grouped).length === 0 ? (
+            {contacts.length === 0 && !search ? (
+              <div style={{ textAlign: 'center', padding: 60, color: 'var(--bt-text-dim)', fontSize: 13 }}>
+                <div style={{ fontSize: 32, marginBottom: 12 }}>📋</div>
+                <div style={{ fontWeight: 600, marginBottom: 8 }}>Your CRM is empty</div>
+                <div style={{ fontSize: 12, lineHeight: 1.6 }}>
+                  Go to your Pipeline and click <strong>&quot;+ CRM&quot;</strong> on any contact<br />to add them here.
+                </div>
+              </div>
+            ) : Object.keys(grouped).length === 0 ? (
               <div style={{ textAlign: 'center', padding: 40, color: 'var(--bt-text-dim)', fontSize: 13 }}>
-                {search ? 'No contacts match your search.' : 'No contacts yet.'}
+                No contacts match your search.
               </div>
             ) : (
               Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([letter, leads]) => (
@@ -408,7 +417,7 @@ James Carter,seller,321-555-8834,james@example.com,123 Oak St Orlando,contacted,
                             setEditData({ lead_name: contact.lead_name || '', phone: contact.phone || '', email: contact.email || '', property_address: contact.property_address || '', notes: contact.notes || '', lead_type: contact.lead_type || '', stage: contact.stage || '' })
                           }} style={{ fontSize: 9, padding: '3px 8px', background: editId === contact.id ? '#4CAF50' : 'transparent', border: '1px solid var(--bt-border)', color: editId === contact.id ? '#fff' : 'var(--bt-text-dim)', borderRadius: 3, cursor: 'pointer' }}>Edit</button>
                           <button onClick={() => hibernateContact(contact.id)} style={{ fontSize: 9, padding: '3px 8px', background: 'transparent', border: '1px solid var(--bt-border)', color: '#FF9800', borderRadius: 3, cursor: 'pointer' }}>Hibernate</button>
-                          <button onClick={() => deleteContact(contact.id, contact.lead_name)} style={{ fontSize: 9, padding: '3px 8px', background: 'transparent', border: '1px solid var(--bt-border)', color: '#E04E4E', borderRadius: 3, cursor: 'pointer' }}>Delete</button>
+                          <button onClick={() => removeFromCRM(contact.id, contact.lead_name)} style={{ fontSize: 9, padding: '3px 8px', background: 'transparent', border: '1px solid var(--bt-border)', color: '#E04E4E', borderRadius: 3, cursor: 'pointer' }}>Remove from CRM</button>
                         </div>
 
                         {/* Inline Edit Form */}
