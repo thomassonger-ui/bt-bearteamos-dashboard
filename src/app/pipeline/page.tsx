@@ -7,7 +7,7 @@ import MobilePipeline from '@/components/MobilePipeline'
 import PipelineBoard from '@/components/PipelineBoard'
 import ActivityChart from '@/components/ActivityChart'
 import CoachPanel from '@/components/CoachPanel'
-import { getFirstAgent, getAgent, getPipeline, updateLastContact, updatePipelineStage, updatePipelineLead, logActivity } from '@/lib/queries'
+import { getFirstAgent, getAgent, getPipeline, updateLastContact, updatePipelineStage, updatePipelineLead, logActivity, addToCRM } from '@/lib/queries'
 import { getWeeklyMetrics, paceColor, insightLine, TARGETS } from '@/lib/metrics'
 import type { Agent, Pipeline } from '@/types'
 import type { WeeklyMetrics } from '@/lib/metrics'
@@ -309,7 +309,9 @@ export default function PipelinePage() {
 
           {/* Pipeline board - scrollable */}
           <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
-            <PipelineBoard pipeline={pipeline} onContact={handleContact} onSelectLead={setSelectedLead} selectedLeadId={selectedLead?.id ?? null} onStageChange={handleStageChange} onEditSave={handleEditSave} />
+            <PipelineBoard pipeline={pipeline} onContact={handleContact} onSelectLead={setSelectedLead} selectedLeadId={selectedLead?.id ?? null} onStageChange={handleStageChange} onEditSave={handleEditSave} 
+          onAddToCRM={async (id) => { await addToCRM(id) }}
+        />
           </div>
         </div>
 
@@ -365,3 +367,4 @@ export default function PipelinePage() {
     </div>
   )
 }
+
