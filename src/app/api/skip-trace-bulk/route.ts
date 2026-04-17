@@ -75,13 +75,38 @@ export async function POST(req: NextRequest) {
     try {
       let streetAddr = rawAddr
       let city = 'Orlando'
-      const match = rawAddr.match(/^(.+?),\s*([A-Za-z\s]+),?\s*FL\b/i)
-      if (match) {
-        streetAddr = match[1].trim()
-        city = match[2].trim()
+      let zip = lead.zip_code ?? undefined
+
+      // Extract zip from address string if not in db
+      if (!zip) {
+        const zipMatch = rawAddr.match(/\b(\d{5})\b/)
+        if (zipMatch) zip = zipMatch[1]
       }
 
-      const result = await skipTraceAddress(streetAddr, city, 'FL', lead.zip_code ?? undefined)
+      // Standard format: "123 Main St, Orlando, FL 32801"
+      const stdMatch = rawAddr.match(/^(.+?),\s*([A-Za-z][A-Za-z\s]+?),\s*FL\b/i)
+      if (stdMatch) {
+        streetAddr = stdMatch[1].trim()
+        city = stdMatch[2].trim()
+      } else {
+        // ByOwner format: "10753 Leafy Laurel Street ORLANDO, FL 32829"
+        // City = all-caps word(s) before ", FL"
+        const flIdx = rawAddr.search(/,?\s*FL\b/i)
+        if (flIdx > 0) {
+          const streetAndCity = rawAddr.substring(0, flIdx).trim()
+          const capsMatch = streetAndCity.match(/^(.+?)\s+([A-Z]{3,}(?:\s+[A-Z]{2,})*)$/)
+          if (capsMatch) {
+            streetAddr = capsMatch[1].trim()
+            city = capsMatch[2].charAt(0) + capsMatch[2].slice(1).toLowerCase()
+          } else {
+            streetAddr = streetAndCity
+          }
+        }
+      }
+
+      console.log(`[skip-trace-bulk] Tracing street="${streetAddr}" city="${city}" zip="${zip}"`)
+
+      const result = await skipTraceAddress(streetAddr, city, 'FL', zip)
 
       if (result) {
         await supabase
