@@ -1,88 +1,77 @@
-// ─── Tracerfy Skip Trace Service ─────────────────────────────────────────────
-// Uses Tracerfy Instant Trace Lookup — real-time, single address, no queue.
-// Cost: 5 credits per hit ($0.10), 0 credits on miss.
-// Called automatically when an agent accepts a hot lead.
-//
-// SETUP: Add this to your Vercel environment variables:
-//   TRACERFY_API_KEY = <your token from tracerfy.com account settings>
-
-const TRACERFY_API_KEY = process.env.TRACERFY_API_KEY ?? ''
-const TRACERFY_URL = 'https://tracerfy.com/v1/api/trace/lookup/'
+// Tracerfy Skip Trace API wrapper
+// Docs: https://tracerfy.com/v1/api/trace/lookup/
+// Returns owner name, best phone, best email for a property address.
 
 export interface SkipTraceResult {
-  owner_name?: string
-  phone1?: string
-  phone2?: string
-  phone3?: string
-  email?: string
-  mailing_address?: string
+  owner_name: string
+  phone1: string | null
+  email: string | null
+  hit: boolean
 }
 
 export async function skipTraceAddress(
   address: string,
-  city?: string,
-  state = 'FL',
+  city: string,
+  state: string,
   zip?: string
 ): Promise<SkipTraceResult | null> {
-  if (!TRACERFY_API_KEY) {
-    console.warn('[skipTrace] TRACERFY_API_KEY not set — skipping enrichment')
+  const apiKey = process.env.TRACERFY_API_KEY
+  if (!apiKey) {
+    console.error('[skipTrace] TRACERFY_API_KEY not set')
     return null
   }
 
   try {
-    const res = await fetch(TRACERFY_URL, {
+    const body: Record<string, string | boolean> = {
+      address,
+      city,
+      state,
+      find_owner: true,
+    }
+    if (zip) body.zip = zip
+
+    const res = await fetch('https://tracerfy.com/v1/api/trace/lookup/', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${TRACERFY_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        address,
-        city: city ?? 'Orlando',
-        state,
-        zip: zip ?? undefined,
-        find_owner: true,   // we only have the address, not the owner's name
-      }),
+      body: JSON.stringify(body),
     })
 
     if (!res.ok) {
-      console.error('[skipTrace] Tracerfy API error:', res.status, await res.text())
+      console.error('[skipTrace] API error:', res.status, await res.text())
       return null
     }
 
     const data = await res.json()
 
-    // No hit — owner not found (0 credits charged)
-    if (!data.hit || !data.persons?.length) {
-      console.log('[skipTrace] No hit for address:', address)
+    if (!data.hit || !data.persons || data.persons.length === 0) {
       return null
     }
 
-    // Use the first person marked as property owner, fallback to first result
-    const person = data.persons.find((p: any) => p.property_owner) ?? data.persons[0]
+    // Find property owner in persons list
+    const persons = data.persons as Array<{
+      first_name?: string
+      last_name?: string
+      is_property_owner?: boolean
+      phones?: Array<{ phone: string; rank?: number }>
+      emails?: Array<{ email: string }>
+    }>
 
-    const phones = (person.phones ?? [])
-      .sort((a: any, b: any) => a.rank - b.rank)
-      .map((p: any) => p.number)
+    const owner = persons.find(p => p.is_property_owner) ?? persons[0]
 
-    const emails = (person.emails ?? [])
-      .sort((a: any, b: any) => a.rank - b.rank)
-      .map((e: any) => e.email)
+    const ownerName = [owner.first_name, owner.last_name].filter(Boolean).join(' ') || 'Unknown Owner'
 
-    const mailingAddr = person.mailing_address
-      ? `${person.mailing_address.street}, ${person.mailing_address.city}, ${person.mailing_address.state} ${person.mailing_address.zip}`
-      : undefined
+    // Best phone = lowest rank (rank 1 = best)
+    const phones = (owner.phones ?? []).sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))
+    const phone1 = phones[0]?.phone ?? null
 
-    return {
-      owner_name: (person.full_name ?? `${person.first_name ?? ''} ${person.last_name ?? ''}`.trim()) || undefined,
-      phone1: phones[0],
-      phone2: phones[1],
-      phone3: phones[2],
-      email: emails[0],
-      mailing_address: mailingAddr,
-    }
+    const email = owner.emails?.[0]?.email ?? null
+
+    return { owner_name: ownerName, phone1, email, hit: true }
   } catch (err) {
-    console.error('[skipTrace] Fetch failed:', err)
+    console.error('[skipTrace] Exception:', err)
     return null
   }
 }

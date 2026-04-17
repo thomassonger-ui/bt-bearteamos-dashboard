@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { getSupabase } from '@/lib/supabase'
-import type { Pipeline, HotLeadSource, Agent } from '@/types'
-import { getAllAgents } from '@/lib/queries'
+import type { Pipeline, HotLeadSource } from '@/types'
 import ResponsiveShell from '@/components/ResponsiveShell'
 import HotLeadCard from '@/components/HotLeadCard'
 import HotLeadSourcePanel from '@/components/HotLeadSourcePanel'
@@ -34,18 +33,15 @@ export default function HotLeadsPage() {
   const [loading, setLoading] = useState(true)
   const [acceptedToday, setAcceptedToday] = useState(0)
   const [isAdmin, setIsAdmin] = useState(false)
-  const [agents, setAgents] = useState<Agent[]>([])
   const [showUpload, setShowUpload] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadResult, setUploadResult] = useState<string | null>(null)
+  const [tracing, setTracing] = useState(false)
+  const [traceResult, setTraceResult] = useState<string | null>(null)
   const MAX_DAILY = 2
 
   useEffect(() => {
-    const admin = sessionStorage.getItem('bt_is_admin') === 'true'
-    setIsAdmin(admin)
-    if (admin) {
-      getAllAgents().then(setAgents)
-    }
+    setIsAdmin(sessionStorage.getItem('bt_is_admin') === 'true')
   }, [])
 
   function parseCSVLine(line: string): string[] {
@@ -71,53 +67,32 @@ export default function HotLeadsPage() {
       const text = await file.text()
       const lines = text.split('\n').filter(l => l.trim())
       if (lines.length < 2) { setUploadResult('CSV is empty.'); setUploading(false); return }
-      const rawHeaders = parseCSVLine(lines[0])
-      const headers = rawHeaders.map(h => h.trim().toLowerCase().replace(/^"|"$/g, '').replace(/\s+/g, ' '))
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''))
 
       function findInRow(vals: string[], test: (v: string) => boolean): string {
         for (const v of vals) { if (v && test(v.trim())) return v.trim() }
         return ''
       }
 
+      const parsedLeads: Array<Record<string, string>> = []
       let detectedSource = 'manual_upload'
-      const parsedLeads: Record<string, unknown>[] = []
-      let clientSkipped = 0
 
       for (let i = 1; i < lines.length; i++) {
         const vals = parseCSVLine(lines[i])
         if (vals.every(v => !v.trim())) continue
 
-        const get = (keys: string[]) => {
-          for (const k of keys) {
-            const idx = headers.indexOf(k)
-            if (idx >= 0 && vals[idx]) return vals[idx].trim()
-          }
-          return ''
-        }
+        const get = (keys: string[]) => { for (const k of keys) { const idx = headers.indexOf(k); if (idx >= 0 && vals[idx]) return vals[idx].trim() } return '' }
 
-        // ─── TITLE DETECTION ────────────────────────────────────────────────
-        let title = get(['address', 'title', 'name', 'lead_name', 'property', 'street',
-                         'property address', 'listing title', 'listing address', 'location',
-                         'card-text', 'card text'])
-
-        // Any column starting with a digit (street number = address)
-        if (!title) title = findInRow(vals, v =>
-          /^\d+\s+[A-Za-z]/.test(v) &&
-          !v.startsWith('http') && !v.startsWith('$') &&
-          !/^\d+$/.test(v.trim()) &&
-          v.length > 6 && v.length < 120 &&
-          /[A-Za-z]{2,}/.test(v)
-        )
-
-        // Full address with city/state
-        let fullAddr = findInRow(vals, v => /\d+.*,\s*(Orlando|FL|Florida|Kissimmee|Sanford|Ocoee|Apopka|Winter Park|Altamonte|Lake Mary|Clermont|Daytona|Tampa|Deltona)/i.test(v))
+        let title = get(['address', 'title', 'name', 'lead_name', 'property', 'street', 'card-text'])
+        const fullAddr = findInRow(vals, v => /\d+.*,\s*(Orlando|FL|Florida)/i.test(v))
         if (!title && fullAddr) title = fullAddr.split(',')[0].trim()
+        if (!title) title = findInRow(vals, v => /^\d+\s+[A-Za-z]/.test(v) && !v.startsWith('http') && !v.startsWith('$') && v.length > 10 && v.length < 80)
 
-        // Extract from URL slug (ByOwner-style paths)
+        // ByOwner URL-based address extraction
         if (!title) {
           const urlVal = findInRow(vals, v => v.startsWith('http'))
           if (urlVal) {
-            const pathMatch = urlVal.match(/\/([\d]+-[a-z0-9-]+-(?:orlando|fl|kissimmee|sanford|winter-park|lake-mary|altamonte|ocoee|apopka|clermont)[a-z0-9-]*)/i)
+            const pathMatch = urlVal.match(/\/(\d+-[a-z0-9-]+-(?:orlando|fl|kissimmee|sanford|winter-park|lake-mary|altamonte)[a-z0-9-]*)/i)
             if (pathMatch) {
               title = pathMatch[1]
                 .replace(/-(\d{5}).*$/, ', FL $1')
@@ -127,50 +102,29 @@ export default function HotLeadsPage() {
                 .replace(/\b\w/g, c => c.toUpperCase())
                 .trim()
             }
-            if (!title) {
-              const lastSeg = urlVal.split('/').filter(Boolean).pop() ?? ''
-              if (/^\d/.test(lastSeg) && lastSeg.length > 6) {
-                title = lastSeg.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).trim()
-              }
-            }
           }
         }
 
-        // Last resort: any non-trivial text column value
-        if (!title) {
-          title = findInRow(vals, v =>
-            v.length >= 8 && v.length <= 120 &&
-            !v.startsWith('http') && !v.startsWith('$') &&
-            !/^[\d.]+$/.test(v.trim()) &&
-            /[A-Za-z]{3,}/.test(v) &&
-            !['true','false','yes','no','n/a','null','undefined'].includes(v.toLowerCase())
-          )
-        }
+        if (!title) continue
 
-        if (!title) { clientSkipped++; continue }
-
-        // ─── PRICE ──────────────────────────────────────────────────────────
-        let priceStr = get(['price', 'sale_price', 'asking_price', 'list_price', 'asking price', 'list price', 'card-title', 'card title'])
-        if (!priceStr) priceStr = findInRow(vals, v => /^\$[\d,]+/.test(v))
+        let priceStr = get(['price', 'sale_price', 'asking_price', 'list_price', 'card-title'])
+        if (!priceStr) priceStr = findInRow(vals, v => /^\$[\d,]+$/.test(v))
         const price = priceStr ? parseFloat(priceStr.replace(/[$,]/g, '')) : undefined
-        if (price && price < 5000) { clientSkipped++; continue }
+        if (price && price < 20000) continue // skip rentals
 
-        // ─── URL / SOURCE ────────────────────────────────────────────────────
-        let url = get(['url', 'link', 'listing_url', 'listing url', 'c11n href', 'block href', 'href', 'source url', 'card href', 'card-href'])
+        let url = get(['url', 'link', 'listing_url', 'c11n href', 'block href', 'card href'])
         if (!url) url = findInRow(vals, v => v.startsWith('http'))
 
         if (url.includes('zillow.com')) detectedSource = 'zillow_fsbo'
         else if (url.includes('forsalebyowner.com')) detectedSource = 'forsalebyowner'
         else if (url.includes('fsbo.com')) detectedSource = 'fsbo_com'
         else if (url.includes('byowner.com')) detectedSource = 'byowner'
-        else if (url.includes('craigslist.org')) detectedSource = 'craigslist'
 
-        // ─── LOCATION / ZIP ──────────────────────────────────────────────────
-        let location = get(['location', 'city', 'neighborhood', 'area', 'city/state'])
+        let location = get(['location', 'city', 'neighborhood', 'area'])
         if (!location && fullAddr) location = fullAddr
         if (!location) location = findInRow(vals, v => /Orlando|FL|\d{5}/.test(v) && !v.startsWith('http') && !v.startsWith('$'))
 
-        let zip = get(['zip', 'zipcode', 'zip_code', 'zip code', 'postal', 'postal code'])
+        let zip = get(['zip', 'zipcode', 'zip_code', 'postal'])
         if (!zip) { const zipMatch = (fullAddr || location || '').match(/\b(3\d{4})\b/); if (zipMatch) zip = zipMatch[1] }
 
         const allText = vals.join(' ')
@@ -180,76 +134,69 @@ export default function HotLeadsPage() {
         const desc = [bedsMatch ? `${bedsMatch[1]} bed` : '', bathsMatch ? `${bathsMatch[1]} bath` : '', sqftMatch ? `${sqftMatch[1]} sqft` : ''].filter(Boolean).join(', ')
 
         parsedLeads.push({
-          lead_name:        title.slice(0, 100),
-          lead_source:      detectedSource,
-          arv:              price && !isNaN(price) ? price : null,
-          property_address: location || null,
-          zip_code:         zip || null,
-          phone:            get(['phone', 'contact', 'seller_phone', 'phone number']) || null,
-          email:            get(['email', 'seller_email', 'contact_email']) || null,
-          notes:            desc || null,
-          source_url:       url || null,
-          source_id:        url || `upload_${Date.now()}_${i}`,
+          title,
+          price: price ? String(price) : '',
+          url: url || '',
+          source: detectedSource,
+          location: location || '',
+          zip: zip || '',
+          phone: get(['phone', 'contact', 'seller_phone']),
+          email: get(['email', 'seller_email', 'contact_email']),
+          description: desc,
         })
       }
 
-      // ─── PRE-FLIGHT CHECK ────────────────────────────────────────────────
       if (parsedLeads.length === 0) {
-        setUploadResult(
-          `Could not extract any leads from this CSV (${clientSkipped} row${clientSkipped !== 1 ? 's' : ''} skipped — ` +
-          `no address or title found). Make sure the CSV has an "address" or "title" column, or that listing URLs are present.`
-        )
+        setUploadResult('No valid leads found in CSV. Check that address column is present.')
         setUploading(false)
         e.target.value = ''
         return
       }
 
-      // ─── AUTH CHECK ──────────────────────────────────────────────────────
-      const accessToken = typeof window !== 'undefined' ? sessionStorage.getItem('bt_access_token') ?? '' : ''
-      if (!accessToken) {
-        setUploadResult('Not authenticated — please log out and log back in, then retry.')
-        setUploading(false)
-        e.target.value = ''
-        return
-      }
+      setUploadResult(`Parsed ${parsedLeads.length} leads — uploading…`)
 
-      setUploadResult(`Parsed ${parsedLeads.length} lead${parsedLeads.length !== 1 ? 's' : ''} — uploading…`)
-
-      // ─── SEND TO SERVER ──────────────────────────────────────────────────
+      // Send to server-side API route (uses service role key + skip trace)
+      const token = sessionStorage.getItem('bt_access_token') ?? ''
       const res = await fetch('/api/hot-leads-csv', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ leads: parsedLeads }),
       })
-
       const result = await res.json()
-
       if (!res.ok) {
-        setUploadResult(`Upload error: ${result.error ?? res.statusText}${result.detail ? ' — ' + result.detail : ''}`)
-        setUploading(false)
-        e.target.value = ''
-        return
+        setUploadResult(`Upload error: ${result.error ?? res.statusText}`)
+      } else {
+        setUploadResult(result.message ?? `Imported ${result.inserted} leads.`)
+        fetchLeads()
       }
-
-      const added = result.added ?? 0
-      const apiSkipped = result.skipped ?? 0
-      const totalSkipped = clientSkipped + apiSkipped
-      setUploadResult(
-        `Imported ${added} lead${added !== 1 ? 's' : ''}` +
-        (totalSkipped > 0 ? `, ${totalSkipped} skipped` : '') +
-        (result.firstError ? ` — DB error: ${result.firstError}` : '')
-      )
-      fetchLeads()
     } catch (err) {
-      console.error('[CSV upload]', err)
-      setUploadResult('Error reading file.')
+      setUploadResult(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    } finally {
+      setUploading(false)
+      e.target.value = ''
     }
-    finally { setUploading(false); e.target.value = '' }
   }
 
+  async function handleSkipTraceAll() {
+    setTracing(true)
+    setTraceResult(null)
+    try {
+      const token = sessionStorage.getItem('bt_access_token') ?? ''
+      const res = await fetch('/api/skip-trace-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      })
+      const result = await res.json()
+      setTraceResult(result.message ?? (res.ok ? 'Done.' : `Error: ${result.error}`))
+      if (res.ok) fetchLeads()
+    } catch (err) {
+      setTraceResult(`Error: ${err instanceof Error ? err.message : 'Unknown'}`)
+    } finally {
+      setTracing(false)
+    }
+  }
+
+  // Count how many leads this agent accepted today — per agent
   useEffect(() => {
     const agentId = sessionStorage.getItem('bt_agent_id') || 'default'
     const storedDate = sessionStorage.getItem(`bt_accept_date_${agentId}`)
@@ -264,83 +211,27 @@ export default function HotLeadsPage() {
     }
   }, [])
 
-  // ─── TRANSFER LEAD — admin only, reassigns lead to a specific agent ──────────
-  async function transferLead(leadId: string, agentId: string) {
-    await getSupabase()
-      .from('pipeline')
-      .update({ agent_id: agentId, stage: 'new_lead', is_hot_lead: false })
-      .eq('id', leadId)
-    fetchLeads()
-  }
-
-  // ─── ACCEPT LEAD — now with automatic skip trace enrichment ──────────────────
   async function acceptLead(leadId: string) {
-    if (!isAdmin && acceptedToday >= MAX_DAILY) return
+    if (acceptedToday >= MAX_DAILY) return
     const remaining = MAX_DAILY - acceptedToday
     const confirmed = window.confirm(
       `You are about to accept this lead.\n\n` +
-      (!isAdmin ? `You have ${remaining} lead${remaining !== 1 ? 's' : ''} remaining today.\nAfter accepting ${MAX_DAILY} leads, this page will lock for 24 hours.\n\n` : '') +
+      `You have ${remaining} lead${remaining !== 1 ? 's' : ''} remaining today.\n` +
+      `After accepting ${MAX_DAILY} leads, this page will lock for 24 hours.\n\n` +
       `This lead will be added to your pipeline. Continue?`
     )
     if (!confirmed) return
-
     const agentId = sessionStorage.getItem('bt_agent_id')
     if (!agentId) return
-
-    // 1. Move lead into agent's pipeline immediately
     await getSupabase()
       .from('pipeline')
       .update({ agent_id: agentId, stage: 'new_lead', is_hot_lead: false })
       .eq('id', leadId)
-
-    // 2. Update daily counter
     const aid = sessionStorage.getItem('bt_agent_id') || 'default'
     const newCount = acceptedToday + 1
     setAcceptedToday(newCount)
     sessionStorage.setItem(`bt_accept_count_${aid}`, newCount.toString())
     sessionStorage.setItem(`bt_accept_date_${aid}`, new Date().toDateString())
-
-    // 3. Run skip trace via server-side API route (TRACERFY_API_KEY is server-only)
-    const lead = leads.find(l => l.id === leadId)
-    // Smart address resolution — find the best real street address for Tracerfy
-    // property_address may just be a city ("kissimmee") — check it has a street number
-    const hasStreetNumber = (s?: string | null) => /\d/.test(s ?? '')
-    let addrSource = ''
-    if (hasStreetNumber(lead?.property_address)) {
-      addrSource = lead!.property_address!
-    } else if (lead?.notes) {
-      // Try to extract street address from notes/description text
-      // e.g. "Location: St Andrews Ct, Kissimmee, FL" or "4185 Scotland Rd, Kissimmee"
-      const notesMatch = lead.notes.match(/(?:location[:\s]+)?([\d]+[^,\n]+(?:st|ave|blvd|rd|ct|dr|ln|way|pl|cir|trail|terr?|pkwy)[^,\n]*,?\s*[A-Za-z\s]+,?\s*FL[\s\d]*)/i)
-        || lead.notes.match(/([A-Z][\w\s]+(?:St|Ave|Blvd|Rd|Ct|Dr|Ln|Way|Pl|Cir|Trail|Terr?|Pkwy)[\w\s,]*FL)/i)
-      if (notesMatch) addrSource = notesMatch[1].trim()
-    }
-    // Final fallback
-    if (!addrSource) addrSource = lead?.property_address || lead?.lead_name || ''
-
-    if (lead && addrSource) {
-      const addrMatch = addrSource.match(/^(.+)\s+([A-Za-z]+(?:\s+[A-Za-z]+)*),?\s*FL\b/i)
-      let streetAddress = addrSource
-      let city = 'Orlando'
-      if (addrMatch) {
-        streetAddress = addrMatch[1].trim()
-        city = addrMatch[2].trim()
-      }
-      fetch('/api/skip-trace', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          leadId,
-          address: streetAddress,
-          city,
-          zip: lead.zip_code ?? undefined,
-        }),
-      })
-        .then(r => r.json())
-        .then(result => console.log('[skipTrace] Result:', result))
-        .catch(err => console.error('[skipTrace] API call failed:', err))
-    }
-
     fetchLeads()
   }
 
@@ -387,19 +278,20 @@ export default function HotLeadsPage() {
     }).length,
   }
 
+  // Unique lead types from data
   const leadTypes = [...new Set(leads.map(l => l.hot_lead_type).filter(Boolean))]
 
   return (
     <ResponsiveShell>
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-        {/* Disclaimer banner */}
+        {/* Disclaimer banner — fixed at top */}
         <div style={{
           padding: '8px 32px', background: 'rgba(224,82,82,0.08)',
           borderBottom: '1px solid rgba(224,82,82,0.2)',
           display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0,
         }}>
           <span style={{ fontSize: 11, color: '#E04E4E', fontWeight: 600 }}>
-            {MAX_DAILY} Leads Per Day &middot; 24-Hour Reset &middot; Once a lead is accepted, owner name, phone &amp; email will appear in Pipeline
+            Only {MAX_DAILY} Leads Per Day &middot; Leads refresh every 24 hours
           </span>
           <span style={{ fontSize: 11, color: 'var(--bt-text-dim)' }}>
             {acceptedToday}/{MAX_DAILY} accepted today
@@ -409,7 +301,7 @@ export default function HotLeadsPage() {
         {/* Admin CSV Upload */}
         {isAdmin && (
           <div style={{ padding: '0 32px', flexShrink: 0 }}>
-            <div style={{ display: 'flex', gap: 8, marginBottom: showUpload ? 0 : 8 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: showUpload ? 0 : 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <button onClick={() => setShowUpload(v => !v)} style={{
                 fontSize: 11, padding: '5px 12px', fontWeight: 600,
                 background: showUpload ? '#1976D2' : 'var(--bt-surface)',
@@ -417,6 +309,14 @@ export default function HotLeadsPage() {
                 color: showUpload ? '#fff' : 'var(--bt-text-dim)',
                 borderRadius: 4, cursor: 'pointer',
               }}>Upload Leads CSV</button>
+              <button onClick={handleSkipTraceAll} disabled={tracing} style={{
+                fontSize: 11, padding: '5px 12px', fontWeight: 600,
+                background: tracing ? 'var(--bt-surface)' : 'rgba(76,175,80,0.12)',
+                border: '1px solid rgba(76,175,80,0.4)',
+                color: tracing ? 'var(--bt-text-dim)' : '#4CAF50',
+                borderRadius: 4, cursor: tracing ? 'default' : 'pointer',
+              }}>{tracing ? 'Running Skip Trace…' : 'Run Skip Trace on All Leads'}</button>
+              {traceResult && <span style={{ fontSize: 11, color: traceResult.includes('Error') ? '#E04E4E' : '#4CAF50' }}>{traceResult}</span>}
             </div>
             {showUpload && (
               <div style={{ marginTop: 8, marginBottom: 12, padding: '12px', background: 'rgba(25,118,210,0.06)', border: '1px solid rgba(25,118,210,0.2)', borderRadius: 6 }}>
@@ -442,7 +342,7 @@ export default function HotLeadsPage() {
           </div>
         )}
 
-        {!isAdmin && acceptedToday >= MAX_DAILY ? (
+        {acceptedToday >= MAX_DAILY ? (
           <div style={{
             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
             flexDirection: 'column', gap: 12, padding: 40,
@@ -450,7 +350,7 @@ export default function HotLeadsPage() {
             <div style={{ fontSize: 40 }}>&#128274;</div>
             <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--bt-text)' }}>Daily Limit Reached</div>
             <div style={{ fontSize: 13, color: 'var(--bt-text-dim)', textAlign: 'center', maxWidth: 400 }}>
-              You have accepted {MAX_DAILY} leads today. New leads will be available in 24 hours.
+              You have accepted {MAX_DAILY} leads today. New leads will be available in 24 hours. Leads refresh automatically — no passcode needed.
             </div>
             <div style={{ fontSize: 12, color: 'var(--bt-muted)', marginTop: 8 }}>
               {acceptedToday}/{MAX_DAILY} leads accepted today
@@ -460,11 +360,17 @@ export default function HotLeadsPage() {
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 32px 24px', minHeight: 0 }}>
         <div className="m-stack" style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 24, alignItems: 'start' }}>
         <div>
+        {/* Header */}
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--bt-text)', marginBottom: 4 }}>Hot Leads</h1>
-          <p style={{ fontSize: 12, color: 'var(--bt-text-dim)' }}>Automated lead pipeline from Apify scrapers</p>
+          <h1 style={{ fontSize: 20, fontWeight: 600, color: 'var(--bt-text)', marginBottom: 4 }}>
+            Hot Leads
+          </h1>
+          <p style={{ fontSize: 12, color: 'var(--bt-text-dim)' }}>
+            Automated lead pipeline from Apify scrapers
+          </p>
         </div>
 
+        {/* Stats Bar */}
         <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
           {[
             { label: 'Total Leads', value: stats.total, color: 'var(--bt-accent)' },
@@ -476,42 +382,74 @@ export default function HotLeadsPage() {
               flex: 1, padding: '14px 18px', background: 'var(--bt-surface)',
               border: '1px solid var(--bt-border)', borderRadius: 6,
             }}>
-              <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>{s.label}</div>
+              <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 4 }}>
+                {s.label}
+              </div>
               <div style={{ fontSize: 22, fontWeight: 700, color: s.color }}>{s.value}</div>
             </div>
           ))}
         </div>
 
+        {/* Filters */}
         <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
-          <select value={filterSource} onChange={e => setFilterSource(e.target.value)} style={selectStyle}>
+          <select
+            value={filterSource}
+            onChange={e => setFilterSource(e.target.value)}
+            style={selectStyle}
+          >
             <option value="">All Sources</option>
-            {Object.entries(SOURCE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            {Object.entries(SOURCE_LABEL).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
           </select>
-          <select value={filterUrgency} onChange={e => setFilterUrgency(e.target.value)} style={selectStyle}>
+
+          <select
+            value={filterUrgency}
+            onChange={e => setFilterUrgency(e.target.value)}
+            style={selectStyle}
+          >
             <option value="">All Urgency</option>
             <option value="critical">Critical</option>
             <option value="high">High</option>
             <option value="normal">Normal</option>
             <option value="low">Low</option>
           </select>
-          <select value={filterType} onChange={e => setFilterType(e.target.value)} style={selectStyle}>
+
+          <select
+            value={filterType}
+            onChange={e => setFilterType(e.target.value)}
+            style={selectStyle}
+          >
             <option value="">All Types</option>
-            {leadTypes.map(t => <option key={t} value={t!}>{t!.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>)}
+            {leadTypes.map(t => (
+              <option key={t} value={t!}>{t!.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>
+            ))}
           </select>
+
           {(filterSource || filterUrgency || filterType) && (
-            <button onClick={() => { setFilterSource(''); setFilterUrgency(''); setFilterType('') }}
-              style={{ fontSize: 11, padding: '6px 12px', border: '1px solid var(--bt-border)', background: 'transparent', color: 'var(--bt-text-dim)', borderRadius: 4, cursor: 'pointer' }}>
+            <button
+              onClick={() => { setFilterSource(''); setFilterUrgency(''); setFilterType('') }}
+              style={{ fontSize: 11, padding: '6px 12px', border: '1px solid var(--bt-border)', background: 'transparent', color: 'var(--bt-text-dim)', borderRadius: 4, cursor: 'pointer' }}
+            >
               Clear Filters
             </button>
           )}
         </div>
 
+        {/* Lead List */}
         {loading ? (
-          <div style={{ color: 'var(--bt-text-dim)', fontSize: 13, padding: 40, textAlign: 'center' }}>Loading hot leads...</div>
+          <div style={{ color: 'var(--bt-text-dim)', fontSize: 13, padding: 40, textAlign: 'center' }}>
+            Loading hot leads...
+          </div>
         ) : sorted.length === 0 ? (
-          <div style={{ padding: 40, textAlign: 'center', background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6 }}>
+          <div style={{
+            padding: 40, textAlign: 'center', background: 'var(--bt-surface)',
+            border: '1px solid var(--bt-border)', borderRadius: 6,
+          }}>
             <div style={{ fontSize: 14, color: 'var(--bt-text-dim)', marginBottom: 8 }}>No hot leads yet</div>
-            <div style={{ fontSize: 12, color: 'var(--bt-text-dim)' }}>Connect your Apify scrapers via n8n to start receiving leads</div>
+            <div style={{ fontSize: 12, color: 'var(--bt-text-dim)' }}>
+              Connect your Apify scrapers via n8n to start receiving leads
+            </div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -523,19 +461,19 @@ export default function HotLeadsPage() {
                 sourceLabel={SOURCE_LABEL[lead.lead_source ?? ''] ?? lead.lead_source ?? ''}
                 onRefresh={fetchLeads}
                 onAccept={acceptLead}
-                canAccept={isAdmin || acceptedToday < MAX_DAILY}
-                agents={isAdmin ? agents : undefined}
-                onTransfer={isAdmin ? transferLead : undefined}
+                canAccept={acceptedToday < MAX_DAILY}
               />
             ))}
           </div>
         )}
 
+        {/* Source Health Panel */}
         <div style={{ marginTop: 32 }}>
           <HotLeadSourcePanel sources={sources} />
         </div>
-        </div>
+        </div>{/* end LEFT */}
 
+        {/* ═══ RIGHT: Sources & Schedule ═══ */}
         <div style={{ position: 'sticky', top: 24 }}>
           <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '16px', marginBottom: 12 }}>
             <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10 }}>Schedule</div>
@@ -546,31 +484,51 @@ export default function HotLeadsPage() {
               { label: 'FSBO.com', schedule: 'Manual CSV upload', active: true },
               { label: 'ByOwner.com', schedule: 'Manual CSV upload', active: true },
             ].map(s => (
-              <div key={s.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--bt-border)', opacity: s.active ? 1 : 0.4 }}>
+              <div key={s.label} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '8px 0', borderBottom: '1px solid var(--bt-border)',
+                opacity: s.active ? 1 : 0.4,
+              }}>
                 <div>
                   <div style={{ fontSize: 12, fontWeight: 500 }}>{s.label}</div>
                   <div style={{ fontSize: 10, color: 'var(--bt-text-dim)' }}>{s.schedule}</div>
                 </div>
-                <span style={{ fontSize: 8, fontWeight: 600, padding: '2px 5px', borderRadius: 2, background: s.active ? 'rgba(76,175,80,0.15)' : 'rgba(224,82,82,0.15)', color: s.active ? '#4CAF50' : '#E04E4E' }}>{s.active ? 'ACTIVE' : 'OFF'}</span>
+                <span style={{
+                  fontSize: 8, fontWeight: 600, padding: '2px 5px', borderRadius: 2,
+                  background: s.active ? 'rgba(76,175,80,0.15)' : 'rgba(224,82,82,0.15)',
+                  color: s.active ? '#4CAF50' : '#E04E4E',
+                }}>{s.active ? 'ACTIVE' : 'OFF'}</span>
               </div>
             ))}
           </div>
 
+          {/* Source Stats */}
           <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '16px' }}>
             <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10 }}>Leads by Source</div>
-            {Object.entries({ craigslist: 'Craigslist', zillow_fsbo: 'Zillow FSBO', forsalebyowner: 'ForSaleByOwner', fsbo_com: 'FSBO.com', byowner: 'ByOwner.com', manual_upload: 'Manual' }).map(([key, label]) => {
+            {Object.entries({
+              craigslist: 'Craigslist',
+              zillow_fsbo: 'Zillow FSBO',
+              forsalebyowner: 'ForSaleByOwner',
+              fsbo_com: 'FSBO.com',
+              byowner: 'ByOwner.com',
+              manual_upload: 'Manual',
+            }).map(([key, label]) => {
               const count = leads.filter(l => l.lead_source === key).length
               return (
-                <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--bt-border)', fontSize: 12 }}>
+                <div key={key} style={{
+                  display: 'flex', justifyContent: 'space-between',
+                  padding: '6px 0', borderBottom: '1px solid var(--bt-border)',
+                  fontSize: 12,
+                }}>
                   <span style={{ color: count > 0 ? 'var(--bt-text)' : 'var(--bt-muted)' }}>{label}</span>
                   <span style={{ fontWeight: 600, color: count > 0 ? 'var(--bt-accent)' : 'var(--bt-muted)' }}>{count}</span>
                 </div>
               )
             })}
           </div>
-        </div>
+        </div>{/* end RIGHT */}
 
-        </div>
+        </div>{/* end grid */}
         </div>
         </>)}
       </main>
