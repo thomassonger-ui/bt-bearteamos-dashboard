@@ -16,29 +16,41 @@ function getServiceClient() {
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } })
 }
 
-// Verify the caller is an admin via their JWT
+// Verify the caller is an admin.
+// Checks the httpOnly bt_admin cookie (set server-side on login, never expires with the JWT).
+// Falls back to JWT Bearer token check as secondary.
 async function verifyAdmin(req: NextRequest): Promise<boolean> {
+  // Primary: httpOnly bt_admin cookie (set by /api/auth/session on login)
+  const adminCookie = req.cookies.get('bt_admin')?.value
+  if (adminCookie === 'true') {
+    console.log('[hot-leads-csv] Admin verified via bt_admin cookie')
+    return true
+  }
+
+  // Secondary: JWT Bearer token (may be expired — cookie preferred)
   const authHeader = req.headers.get('authorization') ?? ''
   const token = authHeader.replace('Bearer ', '').trim()
-  if (!token) {
-    console.warn('[hot-leads-csv] No auth token in request')
-    return false
+  if (token) {
+    try {
+      const anonClient = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+      const { data: { user }, error } = await anonClient.auth.getUser(token)
+      if (!error && user) {
+        const adminEmails = (
+          process.env.ADMIN_EMAILS ?? 'thomas.songer@gmail.com,tom@bearteam.com,bethanne@bearteam.com,veronica@bearteam.com'
+        ).split(',').map(e => e.trim().toLowerCase())
+        if (adminEmails.includes(user.email?.toLowerCase() ?? '')) {
+          console.log('[hot-leads-csv] Admin verified via JWT:', user.email)
+          return true
+        }
+      }
+    } catch { /* fall through */ }
   }
-  const anonClient = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  )
-  const { data: { user }, error } = await anonClient.auth.getUser(token)
-  if (error || !user) {
-    console.warn('[hot-leads-csv] Auth failed:', error?.message ?? 'no user')
-    return false
-  }
-  const adminEmails = (
-    process.env.ADMIN_EMAILS ?? 'thomas.songer@gmail.com,tom@bearteam.com,bethanne@bearteam.com,veronica@bearteam.com'
-  ).split(',').map(e => e.trim().toLowerCase())
-  const isAdmin = adminEmails.includes(user.email?.toLowerCase() ?? '')
-  if (!isAdmin) console.warn('[hot-leads-csv] Not an admin:', user.email)
-  return isAdmin
+
+  console.warn('[hot-leads-csv] Auth failed — no valid bt_admin cookie or JWT')
+  return false
 }
 
 export async function POST(req: NextRequest) {
@@ -46,7 +58,7 @@ export async function POST(req: NextRequest) {
 
   const isAdmin = await verifyAdmin(req)
   if (!isAdmin) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+    return NextResponse.json({ error: 'Unauthorized — please log out and log back in' }, { status: 403 })
   }
 
   const db = getServiceClient()
