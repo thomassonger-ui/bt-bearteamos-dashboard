@@ -109,7 +109,10 @@ export default function BrokerPage() {
   async function loadAuthUsers() {
     setAccessLoading(true)
     try {
-      const res = await fetch(`/api/admin/agent-access?callerEmail=${encodeURIComponent(currentUserEmail)}`)
+      const token = sessionStorage.getItem('bt_access_token') ?? ''
+      const res = await fetch('/api/admin/agent-access', {
+        headers: { 'Authorization': `Bearer ${token}` },
+      })
       const data = await res.json()
       if (res.ok) setAuthUsers(data.users)
       else setAccessMsg(data.error)
@@ -124,12 +127,14 @@ export default function BrokerPage() {
 
   async function handleAccessAction(action: string, email: string) {
     setAccessMsg(null)
-    // Always read the most current email — sessionStorage is the reliable sync fallback
-    const callerEmail = currentUserEmail || sessionStorage.getItem('bt_user_email') || ''
+    const token = sessionStorage.getItem('bt_access_token') ?? ''
     const res = await fetch('/api/admin/agent-access', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, email, callerEmail }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ action, email }),
     })
     const data = await res.json()
     setAccessMsg(data.message || data.error)
