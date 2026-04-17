@@ -476,6 +476,27 @@ export async function assignHotLead(pipelineId: string, agentId: string): Promis
   if (error) console.error('assignHotLead:', error.message)
 }
 
+export async function getCRMContacts(agentId: string): Promise<Pipeline[]> {
+  const { data, error } = await getSupabase()
+    .from('pipeline')
+    .select('*')
+    .eq('agent_id', agentId)
+    .eq('in_crm', true)
+    .or('is_hot_lead.is.null,is_hot_lead.eq.false')
+    .order('lead_name', { ascending: true })
+  if (error) { console.error('getCRMContacts:', error.message); return [] }
+  return (data ?? []) as Pipeline[]
+}
+
+export async function addToCRM(pipelineId: string): Promise<void> {
+  const { error } = await getSupabase()
+    .from('pipeline')
+    .update({ in_crm: true })
+    .eq('id', pipelineId)
+  if (error) console.error('addToCRM:', error.message)
+}
+
+
 export async function getHotLeadSources(): Promise<HotLeadSource[]> {
   const { data, error } = await getSupabase()
     .from('hot_lead_sources')
@@ -593,3 +614,4 @@ function rowToLead(row: Record<string, unknown>): Lead {
     createdAt: row.created_at as string,
   }
 }
+
