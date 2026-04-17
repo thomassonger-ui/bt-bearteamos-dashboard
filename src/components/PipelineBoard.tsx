@@ -11,6 +11,7 @@ interface Props {
   selectedLeadId?: string | null
   onStageChange?: (pipelineId: string, newStage: string) => Promise<void>
   onEditSave?: (pipelineId: string, data: Record<string, string>) => Promise<void>
+  onAddToCRM?: (pipelineId: string) => Promise<void>
 }
 
 const STAGES: { key: string; label: string; color: string }[] = [
@@ -185,7 +186,7 @@ function ComplianceSection({
   )
 }
 
-export default function PipelineBoard({ pipeline, onContact, onSelectLead, selectedLeadId, onStageChange, onEditSave }: Props) {
+export default function PipelineBoard({ pipeline, onContact, onSelectLead, selectedLeadId, onStageChange, onEditSave, onAddToCRM }: Props) {
   const [dragId, setDragId] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState<string | null>(null)
   const [emailLead, setEmailLead] = useState<string | null>(null)
@@ -204,6 +205,7 @@ export default function PipelineBoard({ pipeline, onContact, onSelectLead, selec
   const [apptStatus, setApptStatus] = useState<string | null>(null)
   // Section expand states
   const [expandedTx, setExpandedTx] = useState<Record<string, boolean>>({})
+  const [crmAdded, setCrmAdded] = useState<Set<string>>(new Set())
   const [expandedPre, setExpandedPre] = useState<Record<string, boolean>>({})
   const [expandedPost, setExpandedPost] = useState<Record<string, boolean>>({})
 
@@ -563,6 +565,16 @@ export default function PipelineBoard({ pipeline, onContact, onSelectLead, selec
                         <button onClick={e => { e.stopPropagation(); onContact?.(lead.id, lead.lead_name) }} style={btnOutline}>Sleep</button>
                         {col.key !== 'active_client' && <button onClick={async e => { e.stopPropagation(); await onStageChange?.(lead.id, 'active_client') }} style={{ ...btnOutline, color: '#FF9800', borderColor: '#FF9800' }}>Active</button>}
                         {col.key !== 'under_contract' && <button onClick={async e => { e.stopPropagation(); await onStageChange?.(lead.id, 'under_contract') }} style={{ ...btnOutline, color: '#4CAF50', borderColor: '#4CAF50' }}>Contract</button>}
+                        {onAddToCRM && (
+                          <button onClick={async e => {
+                            e.stopPropagation()
+                            await onAddToCRM(lead.id)
+                            setCrmAdded(prev => new Set(prev).add(lead.id))
+                            setTimeout(() => setCrmAdded(prev => { const n = new Set(prev); n.delete(lead.id); return n }), 2500)
+                          }} style={{ ...btnOutline, color: crmAdded.has(lead.id) ? '#4CAF50' : 'var(--bt-accent)', borderColor: crmAdded.has(lead.id) ? '#4CAF50' : 'var(--bt-accent)' }}>
+                            {crmAdded.has(lead.id) ? '✓ Added' : '+ CRM'}
+                          </button>
+                        )}
                       </div>
                     </div>
                   )
@@ -608,3 +620,4 @@ const labelStyle: React.CSSProperties = { display: 'block', fontSize: 10, fontWe
 const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', fontSize: 12, background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', color: 'var(--bt-text)', borderRadius: 4, outline: 'none', fontFamily: 'inherit' }
 const btnStyle = (bg: string, color: string, bold = false): React.CSSProperties => ({ fontSize: 9, padding: '3px 7px', borderRadius: 3, background: bg, color, border: 'none', cursor: 'pointer', fontWeight: bold ? 600 : 400 })
 const btnOutline: React.CSSProperties = { fontSize: 9, padding: '2px 6px', borderRadius: 3, background: 'transparent', color: 'var(--bt-text-dim)', border: '1px solid var(--bt-border)', cursor: 'pointer' }
+
