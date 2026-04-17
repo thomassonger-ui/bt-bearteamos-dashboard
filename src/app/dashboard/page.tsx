@@ -6,7 +6,7 @@ import MobileLayout from '@/components/MobileLayout'
 import MobileDashboard from '@/components/MobileDashboard'
 import DailySummaryCard from '@/components/DailySummaryCard'
 import TaskList from '@/components/TaskList'
-import { getAgent, getFirstAgent, getTasks, getCompliance, getPipeline, updateTaskStatus, logActivity } from '@/lib/queries'
+import { getAgent, getTasks, getCompliance, getPipeline, updateTaskStatus, logActivity } from '@/lib/queries'
 import { getWeeklyMetrics } from '@/lib/metrics'
 import type { WeeklyMetrics } from '@/lib/metrics'
 import { runEngine } from '@/lib/engine'
@@ -155,7 +155,13 @@ export default function DashboardPage() {
   useEffect(() => {
     async function init() {
       const storedId = typeof window !== 'undefined' ? sessionStorage.getItem('bt_agent_id') : null
-      const agentData = storedId ? await getAgent(storedId) : await getFirstAgent()
+      // Security: never fall back to another agent's data — if no ID, force re-login
+      if (!storedId) {
+        if (typeof window !== 'undefined') window.location.href = '/login'
+        setLoading(false)
+        return
+      }
+      const agentData = await getAgent(storedId)
       if (!agentData) { setLoading(false); return }
       await runEngine(agentData.id)
       const [freshTasks, freshCompliance, pipelineData, metricsData] = await Promise.all([
