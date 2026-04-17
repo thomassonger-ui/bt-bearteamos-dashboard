@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const DEFAULT_AGENT_ID = 'e424ecf9-ce0d-4e7f-85e9-286dd9f66e1e'
+const DEFAULT_AGENT_ID = '02c850ac-b7ba-4649-859d-8a8fae805ac8' // Tom Songer
 
 // Uses the service role key — bypasses RLS, server-side only
 function getServiceClient() {
