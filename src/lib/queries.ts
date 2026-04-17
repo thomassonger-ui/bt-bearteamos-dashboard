@@ -34,6 +34,17 @@ export async function getAgentByUsername(username: string): Promise<Agent | null
   return data as Agent
 }
 
+export async function getAgentByEmail(email: string): Promise<Agent | null> {
+  const { data, error } = await getSupabase()
+    .from('agents')
+    .select('*')
+    .ilike('email', email)
+    .single()
+  if (error) { console.error('getAgentByEmail:', error.message); return null }
+  return data as Agent | null
+}
+
+
 export async function updateAgentLastActive(agentId: string): Promise<void> {
   const { error } = await getSupabase()
     .from('agents')
@@ -614,4 +625,5 @@ function rowToLead(row: Record<string, unknown>): Lead {
     createdAt: row.created_at as string,
   }
 }
+
 
