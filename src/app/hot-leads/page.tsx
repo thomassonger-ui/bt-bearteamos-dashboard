@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { getSupabase } from '@/lib/supabase'
-import type { Pipeline, HotLeadSource } from '@/types'
+import { getAllAgents } from '@/lib/queries'
+import type { Pipeline, HotLeadSource, Agent } from '@/types'
 import ResponsiveShell from '@/components/ResponsiveShell'
 import HotLeadCard from '@/components/HotLeadCard'
 import HotLeadSourcePanel from '@/components/HotLeadSourcePanel'
@@ -39,10 +40,16 @@ export default function HotLeadsPage() {
   const [traceResult, setTraceResult] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [transferLeadId, setTransferLeadId] = useState<string | null>(null)
+  const [transferAgentId, setTransferAgentId] = useState<string>('')
+  const [transferring, setTransferring] = useState(false)
   const MAX_DAILY = 5
 
   useEffect(() => {
-    setIsAdmin(sessionStorage.getItem('bt_is_admin') === 'true')
+    const admin = sessionStorage.getItem('bt_is_admin') === 'true'
+    setIsAdmin(admin)
+    if (admin) getAllAgents().then(setAgents)
   }, [])
 
   function parseCSVLine(line: string): string[] {
@@ -237,6 +244,31 @@ export default function HotLeadsPage() {
       alert(`Error: ${err instanceof Error ? err.message : 'Unknown'}`)
     } finally {
       setDeleting(false)
+    }
+  }
+
+  async function handleTransfer() {
+    if (!transferLeadId || !transferAgentId) return
+    setTransferring(true)
+    try {
+      const token = sessionStorage.getItem('bt_access_token') ?? ''
+      const res = await fetch('/api/hot-leads-transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ leadId: transferLeadId, agentId: transferAgentId }),
+      })
+      const result = await res.json()
+      if (res.ok) {
+        setTransferLeadId(null)
+        setTransferAgentId('')
+        fetchLeads()
+      } else {
+        alert(`Transfer error: ${result.error ?? 'Unknown'}`)
+      }
+    } catch (err) {
+      alert(`Error: ${err instanceof Error ? err.message : 'Unknown'}`)
+    } finally {
+      setTransferring(false)
     }
   }
 
@@ -542,9 +574,19 @@ export default function HotLeadsPage() {
                     urgencyColor={URGENCY_COLOR[lead.urgency ?? 'normal']}
                     sourceLabel={SOURCE_LABEL[lead.lead_source ?? ''] ?? lead.lead_source ?? ''}
                     onRefresh={fetchLeads}
-                    onAccept={acceptLead}
+                    onAccept={isAdmin ? undefined : acceptLead}
                     canAccept={acceptedToday < MAX_DAILY}
                   />
+                  {isAdmin && (
+                    <div style={{ display: 'flex', gap: 6, padding: '4px 18px 10px', background: 'var(--bt-surface)', borderTop: '1px solid var(--bt-border)', borderRadius: '0 0 6px 6px', marginTop: -6 }}>
+                      <button
+                        onClick={() => { setTransferLeadId(lead.id); setTransferAgentId('') }}
+                        style={{ fontSize: 10, padding: '3px 10px', background: 'rgba(107,156,245,0.12)', border: '1px solid rgba(107,156,245,0.3)', color: '#6b9cf5', borderRadius: 3, cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        Transfer to Agent →
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -614,6 +656,50 @@ export default function HotLeadsPage() {
         </div>
         </>)}
       </main>
+
+      {/* Transfer Modal */}
+      {transferLeadId && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }}
+          onClick={() => setTransferLeadId(null)}
+        >
+          <div style={{
+            background: 'var(--bt-bg)', border: '1px solid var(--bt-border)', borderRadius: 8,
+            padding: 24, width: 360, maxWidth: '90vw',
+          }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Transfer Lead to Agent</div>
+            <div style={{ fontSize: 11, color: 'var(--bt-text-dim)', marginBottom: 16 }}>
+              The lead will move to the agent&apos;s pipeline and leave Hot Leads.
+            </div>
+            <select
+              value={transferAgentId}
+              onChange={e => setTransferAgentId(e.target.value)}
+              style={{ width: '100%', padding: '8px 10px', background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 4, color: 'var(--bt-text)', fontSize: 12, marginBottom: 14 }}
+            >
+              <option value="">— Select an agent —</option>
+              {agents.map(a => (
+                <option key={a.id} value={a.id}>{a.name} ({a.email})</option>
+              ))}
+            </select>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setTransferLeadId(null)} style={{ fontSize: 11, padding: '6px 14px', border: '1px solid var(--bt-border)', background: 'transparent', color: 'var(--bt-text-dim)', borderRadius: 4, cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button
+                onClick={handleTransfer}
+                disabled={!transferAgentId || transferring}
+                style={{ fontSize: 11, padding: '6px 14px', background: transferAgentId ? '#1976D2' : 'var(--bt-surface)', border: '1px solid var(--bt-border)', color: transferAgentId ? '#fff' : 'var(--bt-text-dim)', borderRadius: 4, cursor: transferAgentId ? 'pointer' : 'default', fontWeight: 600 }}
+              >
+                {transferring ? 'Transferring…' : 'Confirm Transfer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </ResponsiveShell>
   )
 }

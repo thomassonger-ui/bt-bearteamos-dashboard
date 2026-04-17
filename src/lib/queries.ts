@@ -227,6 +227,7 @@ export async function getPipeline(agentId: string): Promise<Pipeline[]> {
     .from('pipeline')
     .select('*')
     .eq('agent_id', agentId)
+    .or('is_hot_lead.is.null,is_hot_lead.eq.false')
     .order('last_contact', { ascending: true })
   if (error) { console.error('getPipeline:', error.message); return [] }
   return (data ?? []) as Pipeline[]
@@ -591,13 +592,4 @@ function rowToLead(row: Record<string, unknown>): Lead {
     lastContactedAt: (row.last_contacted_at as string) ?? null,
     createdAt: row.created_at as string,
   }
-}
-export async function getAgentByEmail(email: string) {
-  const { data } = await getSupabase()
-    .from('agents')
-    .select('*')
-    .eq('email', email.toLowerCase().trim())
-    .limit(1)
-    .single()
-  return data ?? null
 }
