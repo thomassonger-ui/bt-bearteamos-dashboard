@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
-const SUPER_ADMIN = 'tom@bearteam.com'
+const SUPER_ADMIN_EMAILS = (process.env.SUPER_ADMIN_EMAILS ?? 'tom@bearteam.com,bethanne@bearteam.com')
+  .split(',').map(e => e.trim().toLowerCase())
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,12 +10,29 @@ const supabaseAdmin = createClient(
   { auth: { autoRefreshToken: false, persistSession: false } }
 )
 
-export async function POST(req: NextRequest) {
-  const { action, email, callerEmail } = await req.json()
+// Verify the caller is a super admin via their JWT — not via client-supplied email
+async function verifySuperAdmin(req: NextRequest): Promise<boolean> {
+  const authHeader = req.headers.get('authorization') ?? ''
+  const accessToken = authHeader.replace('Bearer ', '').trim()
+  if (!accessToken) return false
 
-  if (callerEmail !== SUPER_ADMIN) {
+  const anonClient = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
+  const { data: { user }, error } = await anonClient.auth.getUser(accessToken)
+  if (error || !user) return false
+
+  return SUPER_ADMIN_EMAILS.includes(user.email?.toLowerCase() ?? '')
+}
+
+export async function POST(req: NextRequest) {
+  const isSuperAdmin = await verifySuperAdmin(req)
+  if (!isSuperAdmin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
   }
+
+  const { action, email } = await req.json()
 
   if (!email || !action) {
     return NextResponse.json({ error: 'Missing email or action' }, { status: 400 })
@@ -22,12 +40,10 @@ export async function POST(req: NextRequest) {
 
   try {
     if (action === 'invite') {
-      // Try invite (sends magic link email)
       const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
         redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/onboarding`,
       })
       if (error) {
-        // If rate limited, create the user without email and return a manual link
         if (error.message.toLowerCase().includes('rate limit') || error.message.toLowerCase().includes('email')) {
           const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
             email,
@@ -35,7 +51,6 @@ export async function POST(req: NextRequest) {
             user_metadata: {},
           })
           if (createErr) return NextResponse.json({ error: createErr.message }, { status: 400 })
-          // Generate a magic link they can send manually
           const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
             type: 'invite',
             email,
@@ -53,7 +68,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, message: `Invite sent to ${email}` })
     }
 
-    // Look up user by email
     const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers()
     if (listErr) return NextResponse.json({ error: listErr.message }, { status: 500 })
     const user = users.find((u) => u.email === email)
@@ -68,17 +82,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'revoke') {
-      const { error } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
-        ban_duration: '87600h',
-      })
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(user.id, { ban_duration: '87600h' })
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
       return NextResponse.json({ ok: true, message: `Access revoked for ${email}` })
     }
 
     if (action === 'restore') {
-      const { error } = await supabaseAdmin.auth.admin.updateUserById(user.id, {
-        ban_duration: 'none',
-      })
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(user.id, { ban_duration: 'none' })
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
       return NextResponse.json({ ok: true, message: `Access restored for ${email}` })
     }
@@ -96,8 +106,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const callerEmail = req.nextUrl.searchParams.get('callerEmail')
-  if (callerEmail !== SUPER_ADMIN) {
+  const isSuperAdmin = await verifySuperAdmin(req)
+  if (!isSuperAdmin) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
   }
 
