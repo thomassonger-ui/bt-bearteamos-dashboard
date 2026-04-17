@@ -8,6 +8,14 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
 
+  // /broker is admin-only — enforce server-side via httpOnly cookie
+  if (req.nextUrl.pathname.startsWith('/broker')) {
+    const isAdmin = req.cookies.get('bt_admin')?.value === 'true'
+    if (!isAdmin) {
+      return NextResponse.redirect(new URL('/dashboard', req.url))
+    }
+  }
+
   return NextResponse.next()
 }
 
