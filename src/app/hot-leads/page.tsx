@@ -71,34 +71,52 @@ export default function HotLeadsPage() {
       const text = await file.text()
       const lines = text.split('\n').filter(l => l.trim())
       if (lines.length < 2) { setUploadResult('CSV is empty.'); setUploading(false); return }
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/^"|"$/g, ''))
+      const rawHeaders = parseCSVLine(lines[0])
+      const headers = rawHeaders.map(h => h.trim().toLowerCase().replace(/^"|"$/g, '').replace(/\s+/g, ' '))
 
       function findInRow(vals: string[], test: (v: string) => boolean): string {
         for (const v of vals) { if (v && test(v.trim())) return v.trim() }
         return ''
       }
 
-      let added = 0
-      let skipped = 0
       let detectedSource = 'manual_upload'
       const parsedLeads: Record<string, unknown>[] = []
+      let clientSkipped = 0
 
       for (let i = 1; i < lines.length; i++) {
         const vals = parseCSVLine(lines[i])
         if (vals.every(v => !v.trim())) continue
 
-        const get = (keys: string[]) => { for (const k of keys) { const idx = headers.indexOf(k); if (idx >= 0 && vals[idx]) return vals[idx].trim() } return '' }
+        const get = (keys: string[]) => {
+          for (const k of keys) {
+            const idx = headers.indexOf(k)
+            if (idx >= 0 && vals[idx]) return vals[idx].trim()
+          }
+          return ''
+        }
 
-        let title = get(['address', 'title', 'name', 'lead_name', 'property', 'street'])
-        if (!title) title = findInRow(vals, v => /^\d+\s+[\w]/.test(v) && !v.startsWith('http') && !v.startsWith('$') && !/^\d+$/.test(v.trim()) && v.length > 6 && v.length < 100 && /[A-Za-z]{2,}/.test(v))
+        // ─── TITLE DETECTION ────────────────────────────────────────────────
+        let title = get(['address', 'title', 'name', 'lead_name', 'property', 'street',
+                         'property address', 'listing title', 'listing address', 'location'])
 
-        let fullAddr = findInRow(vals, v => /\d+.*,\s*(Orlando|FL|Florida|Kissimmee|Sanford|Ocoee|Apopka|Winter Park|Altamonte|Lake Mary)/i.test(v))
+        // Any column starting with a digit (street number = address)
+        if (!title) title = findInRow(vals, v =>
+          /^\d+\s+[A-Za-z]/.test(v) &&
+          !v.startsWith('http') && !v.startsWith('$') &&
+          !/^\d+$/.test(v.trim()) &&
+          v.length > 6 && v.length < 120 &&
+          /[A-Za-z]{2,}/.test(v)
+        )
+
+        // Full address with city/state
+        let fullAddr = findInRow(vals, v => /\d+.*,\s*(Orlando|FL|Florida|Kissimmee|Sanford|Ocoee|Apopka|Winter Park|Altamonte|Lake Mary|Clermont|Daytona|Tampa|Deltona)/i.test(v))
         if (!title && fullAddr) title = fullAddr.split(',')[0].trim()
 
+        // Extract from URL slug (ByOwner-style paths)
         if (!title) {
           const urlVal = findInRow(vals, v => v.startsWith('http'))
           if (urlVal) {
-            const pathMatch = urlVal.match(/\/(\d+-[a-z0-9-]+-(?:orlando|fl|kissimmee|sanford|winter-park|lake-mary|altamonte)[a-z0-9-]*)/i)
+            const pathMatch = urlVal.match(/\/([\d]+-[a-z0-9-]+-(?:orlando|fl|kissimmee|sanford|winter-park|lake-mary|altamonte|ocoee|apopka|clermont)[a-z0-9-]*)/i)
             if (pathMatch) {
               title = pathMatch[1]
                 .replace(/-(\d{5}).*$/, ', FL $1')
@@ -108,29 +126,50 @@ export default function HotLeadsPage() {
                 .replace(/\b\w/g, c => c.toUpperCase())
                 .trim()
             }
+            if (!title) {
+              const lastSeg = urlVal.split('/').filter(Boolean).pop() ?? ''
+              if (/^\d/.test(lastSeg) && lastSeg.length > 6) {
+                title = lastSeg.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()).trim()
+              }
+            }
           }
         }
 
-        if (!title) { skipped++; continue }
+        // Last resort: any non-trivial text column value
+        if (!title) {
+          title = findInRow(vals, v =>
+            v.length >= 8 && v.length <= 120 &&
+            !v.startsWith('http') && !v.startsWith('$') &&
+            !/^[\d.]+$/.test(v.trim()) &&
+            /[A-Za-z]{3,}/.test(v) &&
+            !['true','false','yes','no','n/a','null','undefined'].includes(v.toLowerCase())
+          )
+        }
 
-        let priceStr = get(['price', 'sale_price', 'asking_price', 'list_price'])
+        if (!title) { clientSkipped++; continue }
+
+        // ─── PRICE ──────────────────────────────────────────────────────────
+        let priceStr = get(['price', 'sale_price', 'asking_price', 'list_price', 'asking price', 'list price'])
         if (!priceStr) priceStr = findInRow(vals, v => /^\$[\d,]+/.test(v))
         const price = priceStr ? parseFloat(priceStr.replace(/[$,]/g, '')) : undefined
-        if (price && price < 5000) { skipped++; continue }
+        if (price && price < 5000) { clientSkipped++; continue }
 
-        let url = get(['url', 'link', 'listing_url', 'c11n href', 'block href'])
+        // ─── URL / SOURCE ────────────────────────────────────────────────────
+        let url = get(['url', 'link', 'listing_url', 'listing url', 'c11n href', 'block href', 'href', 'source url'])
         if (!url) url = findInRow(vals, v => v.startsWith('http'))
 
         if (url.includes('zillow.com')) detectedSource = 'zillow_fsbo'
         else if (url.includes('forsalebyowner.com')) detectedSource = 'forsalebyowner'
         else if (url.includes('fsbo.com')) detectedSource = 'fsbo_com'
         else if (url.includes('byowner.com')) detectedSource = 'byowner'
+        else if (url.includes('craigslist.org')) detectedSource = 'craigslist'
 
-        let location = get(['location', 'city', 'neighborhood', 'area'])
+        // ─── LOCATION / ZIP ──────────────────────────────────────────────────
+        let location = get(['location', 'city', 'neighborhood', 'area', 'city/state'])
         if (!location && fullAddr) location = fullAddr
         if (!location) location = findInRow(vals, v => /Orlando|FL|\d{5}/.test(v) && !v.startsWith('http') && !v.startsWith('$'))
 
-        let zip = get(['zip', 'zipcode', 'zip_code', 'postal'])
+        let zip = get(['zip', 'zipcode', 'zip_code', 'zip code', 'postal', 'postal code'])
         if (!zip) { const zipMatch = (fullAddr || location || '').match(/\b(3\d{4})\b/); if (zipMatch) zip = zipMatch[1] }
 
         const allText = vals.join(' ')
@@ -140,20 +179,42 @@ export default function HotLeadsPage() {
         const desc = [bedsMatch ? `${bedsMatch[1]} bed` : '', bathsMatch ? `${bathsMatch[1]} bath` : '', sqftMatch ? `${sqftMatch[1]} sqft` : ''].filter(Boolean).join(', ')
 
         parsedLeads.push({
-          lead_name: title.slice(0, 100),
-          lead_source: detectedSource,
-          arv: price && !isNaN(price) ? price : null,
+          lead_name:        title.slice(0, 100),
+          lead_source:      detectedSource,
+          arv:              price && !isNaN(price) ? price : null,
           property_address: location || null,
-          zip_code: zip || null,
-          phone: get(['phone', 'contact', 'seller_phone']) || null,
-          email: get(['email', 'seller_email', 'contact_email']) || null,
-          notes: desc || null,
-          source_url: url || null,
-          source_id: url || `upload_${Date.now()}_${i}`,
+          zip_code:         zip || null,
+          phone:            get(['phone', 'contact', 'seller_phone', 'phone number']) || null,
+          email:            get(['email', 'seller_email', 'contact_email']) || null,
+          notes:            desc || null,
+          source_url:       url || null,
+          source_id:        url || `upload_${Date.now()}_${i}`,
         })
       }
-      // Send parsed leads to server-side route (uses service role key, bypasses RLS)
+
+      // ─── PRE-FLIGHT CHECK ────────────────────────────────────────────────
+      if (parsedLeads.length === 0) {
+        setUploadResult(
+          `Could not extract any leads from this CSV (${clientSkipped} row${clientSkipped !== 1 ? 's' : ''} skipped — ` +
+          `no address or title found). Make sure the CSV has an "address" or "title" column, or that listing URLs are present.`
+        )
+        setUploading(false)
+        e.target.value = ''
+        return
+      }
+
+      // ─── AUTH CHECK ──────────────────────────────────────────────────────
       const accessToken = typeof window !== 'undefined' ? sessionStorage.getItem('bt_access_token') ?? '' : ''
+      if (!accessToken) {
+        setUploadResult('Not authenticated — please log out and log back in, then retry.')
+        setUploading(false)
+        e.target.value = ''
+        return
+      }
+
+      setUploadResult(`Parsed ${parsedLeads.length} lead${parsedLeads.length !== 1 ? 's' : ''} — uploading…`)
+
+      // ─── SEND TO SERVER ──────────────────────────────────────────────────
       const res = await fetch('/api/hot-leads-csv', {
         method: 'POST',
         headers: {
@@ -162,12 +223,29 @@ export default function HotLeadsPage() {
         },
         body: JSON.stringify({ leads: parsedLeads }),
       })
+
       const result = await res.json()
-      added = result.added ?? 0
-      skipped = result.skipped ?? 0
-      setUploadResult(`Imported ${added} lead${added !== 1 ? 's' : ''}${skipped > 0 ? `, ${skipped} skipped` : ''}.`)
+
+      if (!res.ok) {
+        setUploadResult(`Upload error: ${result.error ?? res.statusText}${result.detail ? ' — ' + result.detail : ''}`)
+        setUploading(false)
+        e.target.value = ''
+        return
+      }
+
+      const added = result.added ?? 0
+      const apiSkipped = result.skipped ?? 0
+      const totalSkipped = clientSkipped + apiSkipped
+      setUploadResult(
+        `Imported ${added} lead${added !== 1 ? 's' : ''}` +
+        (totalSkipped > 0 ? `, ${totalSkipped} skipped` : '') +
+        (result.firstError ? ` — DB error: ${result.firstError}` : '')
+      )
       fetchLeads()
-    } catch { setUploadResult('Error reading file.') }
+    } catch (err) {
+      console.error('[CSV upload]', err)
+      setUploadResult('Error reading file.')
+    }
     finally { setUploading(false); e.target.value = '' }
   }
 
