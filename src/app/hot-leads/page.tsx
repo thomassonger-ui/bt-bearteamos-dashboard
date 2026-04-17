@@ -38,6 +38,8 @@ export default function HotLeadsPage() {
   const [uploadResult, setUploadResult] = useState<string | null>(null)
   const [tracing, setTracing] = useState(false)
   const [traceResult, setTraceResult] = useState<string | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [deleting, setDeleting] = useState(false)
   const MAX_DAILY = 5
 
   useEffect(() => {
@@ -193,6 +195,49 @@ export default function HotLeadsPage() {
       setTraceResult(`Error: ${err instanceof Error ? err.message : 'Unknown'}`)
     } finally {
       setTracing(false)
+    }
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function selectAll(ids: string[]) {
+    setSelectedIds(new Set(ids))
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set())
+  }
+
+  async function handleDeleteSelected() {
+    if (selectedIds.size === 0) return
+    const confirmed = window.confirm(`Delete ${selectedIds.size} lead${selectedIds.size !== 1 ? 's' : ''}? This cannot be undone.`)
+    if (!confirmed) return
+    setDeleting(true)
+    try {
+      const token = sessionStorage.getItem('bt_access_token') ?? ''
+      const res = await fetch('/api/hot-leads-bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ids: [...selectedIds] }),
+      })
+      const result = await res.json()
+      if (res.ok) {
+        clearSelection()
+        fetchLeads()
+      } else {
+        alert(`Delete error: ${result.error ?? 'Unknown'}`)
+      }
+    } catch (err) {
+      alert(`Error: ${err instanceof Error ? err.message : 'Unknown'}`)
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -451,21 +496,61 @@ export default function HotLeadsPage() {
               Connect your Apify scrapers via n8n to start receiving leads
             </div>
           </div>
-        ) : (
+        ) : (<>
+          {/* Select toolbar — admin only */}
+          {isAdmin && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <button
+                onClick={() => selectedIds.size === sorted.length ? clearSelection() : selectAll(sorted.map(l => l.id))}
+                style={{ fontSize: 11, padding: '4px 10px', border: '1px solid var(--bt-border)', background: 'var(--bt-surface)', color: 'var(--bt-text-dim)', borderRadius: 4, cursor: 'pointer' }}
+              >
+                {selectedIds.size === sorted.length && sorted.length > 0 ? 'Deselect All' : 'Select All'}
+              </button>
+              {selectedIds.size > 0 && (
+                <button
+                  onClick={handleDeleteSelected}
+                  disabled={deleting}
+                  style={{ fontSize: 11, padding: '4px 10px', border: '1px solid rgba(224,82,82,0.5)', background: 'rgba(224,82,82,0.1)', color: '#E04E4E', borderRadius: 4, cursor: deleting ? 'default' : 'pointer', fontWeight: 600 }}
+                >
+                  {deleting ? 'Deleting…' : `Delete Selected (${selectedIds.size})`}
+                </button>
+              )}
+              {selectedIds.size > 0 && (
+                <span style={{ fontSize: 11, color: 'var(--bt-text-dim)' }}>{selectedIds.size} selected</span>
+              )}
+            </div>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {sorted.map(lead => (
-              <HotLeadCard
-                key={lead.id}
-                lead={lead}
-                urgencyColor={URGENCY_COLOR[lead.urgency ?? 'normal']}
-                sourceLabel={SOURCE_LABEL[lead.lead_source ?? ''] ?? lead.lead_source ?? ''}
-                onRefresh={fetchLeads}
-                onAccept={acceptLead}
-                canAccept={acceptedToday < MAX_DAILY}
-              />
+              <div key={lead.id} style={{ position: 'relative' }}>
+                {isAdmin && (
+                  <div
+                    onClick={() => toggleSelect(lead.id)}
+                    style={{
+                      position: 'absolute', top: 12, left: 12, zIndex: 10,
+                      width: 18, height: 18,
+                      background: selectedIds.has(lead.id) ? 'var(--bt-accent)' : 'var(--bt-surface)',
+                      border: `2px solid ${selectedIds.has(lead.id) ? 'var(--bt-accent)' : 'var(--bt-border)'}`,
+                      borderRadius: 3, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    {selectedIds.has(lead.id) && <span style={{ color: '#fff', fontSize: 11, lineHeight: 1 }}>✓</span>}
+                  </div>
+                )}
+                <div style={{ paddingLeft: isAdmin ? 36 : 0 }}>
+                  <HotLeadCard
+                    lead={lead}
+                    urgencyColor={URGENCY_COLOR[lead.urgency ?? 'normal']}
+                    sourceLabel={SOURCE_LABEL[lead.lead_source ?? ''] ?? lead.lead_source ?? ''}
+                    onRefresh={fetchLeads}
+                    onAccept={acceptLead}
+                    canAccept={acceptedToday < MAX_DAILY}
+                  />
+                </div>
+              </div>
             ))}
           </div>
-        )}
+        </>)}
 
         {/* Source Health Panel */}
         <div style={{ marginTop: 32 }}>
