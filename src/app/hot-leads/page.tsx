@@ -553,7 +553,7 @@ export default function HotLeadsPage() {
 
         {/* Source Health Panel */}
         <div style={{ marginTop: 32 }}>
-          <HotLeadSourcePanel sources={sources} />
+          <HotLeadSourcePanel sources={sources.filter(s => s.source_name !== 'craigslist')} />
         </div>
         </div>{/* end LEFT */}
 
