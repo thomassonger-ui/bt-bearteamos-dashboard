@@ -38,7 +38,7 @@ export default function HotLeadsPage() {
   const [uploadResult, setUploadResult] = useState<string | null>(null)
   const [tracing, setTracing] = useState(false)
   const [traceResult, setTraceResult] = useState<string | null>(null)
-  const MAX_DAILY = 2
+  const MAX_DAILY = 5
 
   useEffect(() => {
     setIsAdmin(sessionStorage.getItem('bt_is_admin') === 'true')
