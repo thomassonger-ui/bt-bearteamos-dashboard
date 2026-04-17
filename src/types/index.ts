@@ -116,6 +116,7 @@ export interface Pipeline {
   source_id?: string
   scraped_at?: string
   is_hot_lead?: boolean
+  in_crm?: boolean
 }
 
 export type LeadSource =
@@ -210,3 +211,4 @@ export interface Lead {
 
 export type TaskStatus = Task['status']
 export type TaskType = string
+
