@@ -81,6 +81,7 @@ export default function HotLeadsPage() {
       let added = 0
       let skipped = 0
       let detectedSource = 'manual_upload'
+      const parsedLeads: Record<string, unknown>[] = []
 
       for (let i = 1; i < lines.length; i++) {
         const vals = parseCSVLine(lines[i])
@@ -138,13 +139,9 @@ export default function HotLeadsPage() {
         const sqftMatch = allText.match(/([\d,]+)\s*sq\s*ft/i)
         const desc = [bedsMatch ? `${bedsMatch[1]} bed` : '', bathsMatch ? `${bathsMatch[1]} bath` : '', sqftMatch ? `${sqftMatch[1]} sqft` : ''].filter(Boolean).join(', ')
 
-        const { error } = await getSupabase().from('pipeline').insert({
-          agent_id: 'e424ecf9-ce0d-4e7f-85e9-286dd9f66e1e',
+        parsedLeads.push({
           lead_name: title.slice(0, 100),
-          stage: 'new_lead',
-          last_contact: new Date().toISOString(),
           lead_source: detectedSource,
-          urgency: 'normal',
           arv: price && !isNaN(price) ? price : null,
           property_address: location || null,
           zip_code: zip || null,
@@ -153,12 +150,21 @@ export default function HotLeadsPage() {
           notes: desc || null,
           source_url: url || null,
           source_id: url || `upload_${Date.now()}_${i}`,
-          scraped_at: new Date().toISOString(),
-          is_hot_lead: true,
         })
-        if (!error) added++
-        else skipped++
       }
+      // Send parsed leads to server-side route (uses service role key, bypasses RLS)
+      const accessToken = typeof window !== 'undefined' ? sessionStorage.getItem('bt_access_token') ?? '' : ''
+      const res = await fetch('/api/hot-leads-csv', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ leads: parsedLeads }),
+      })
+      const result = await res.json()
+      added = result.added ?? 0
+      skipped = result.skipped ?? 0
       setUploadResult(`Imported ${added} lead${added !== 1 ? 's' : ''}${skipped > 0 ? `, ${skipped} skipped` : ''}.`)
       fetchLeads()
     } catch { setUploadResult('Error reading file.') }
