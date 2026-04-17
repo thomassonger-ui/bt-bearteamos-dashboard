@@ -53,9 +53,15 @@ export default function LoginPage() {
       } else {
         sessionStorage.removeItem('bt_is_admin')
       }
+      if (sessionData.is_super_admin) {
+        sessionStorage.setItem('bt_is_super_admin', 'true')
+      } else {
+        sessionStorage.removeItem('bt_is_super_admin')
+      }
 
-      // Resolve agent profile
-      const agent = await getAgentByEmail(email.trim().toLowerCase()) ?? await getFirstAgent()
+      // Resolve agent profile — admins don't fall back to getFirstAgent()
+      // to avoid accidentally loading another agent's data
+      const agent = await getAgentByEmail(email.trim().toLowerCase())
       if (agent) {
         sessionStorage.setItem('bt_agent_id', agent.id)
         sessionStorage.setItem('bt_agent_name', agent.name)
@@ -66,9 +72,17 @@ export default function LoginPage() {
           outcome: 'neutral',
         }).catch(() => {})
         runEngine(agent.id).catch(() => {})
+      } else if (!sessionData.is_admin) {
+        // Non-admin agents only: fallback to first agent
+        const fallback = await getFirstAgent()
+        if (fallback) {
+          sessionStorage.setItem('bt_agent_id', fallback.id)
+          sessionStorage.setItem('bt_agent_name', fallback.name)
+        }
       }
 
-      router.push('/dashboard')
+      // Admins go to broker view; agents go to dashboard
+      router.push(sessionData.is_admin ? '/broker' : '/dashboard')
     } catch (err) {
       console.error(err)
       setError('System error. Please try again.')
