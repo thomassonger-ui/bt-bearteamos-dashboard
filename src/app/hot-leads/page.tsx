@@ -16,7 +16,6 @@ const URGENCY_COLOR: Record<string, string> = {
 }
 
 const SOURCE_LABEL: Record<string, string> = {
-  craigslist: 'Craigslist',
   zillow_fsbo: 'Zillow FSBO',
   forsalebyowner: 'ForSaleByOwner.com',
   fsbo_com: 'FSBO.com',
@@ -563,7 +562,6 @@ export default function HotLeadsPage() {
           <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '16px', marginBottom: 12 }}>
             <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10 }}>Schedule</div>
             {[
-              { label: 'Craigslist', schedule: 'Daily 7AM ET (auto)', active: true },
               { label: 'Zillow FSBO', schedule: 'Manual CSV upload', active: true },
               { label: 'ForSaleByOwner', schedule: 'Manual CSV upload', active: true },
               { label: 'FSBO.com', schedule: 'Manual CSV upload', active: true },
@@ -591,7 +589,6 @@ export default function HotLeadsPage() {
           <div style={{ background: 'var(--bt-surface)', border: '1px solid var(--bt-border)', borderRadius: 6, padding: '16px' }}>
             <div style={{ fontSize: 10, color: 'var(--bt-text-dim)', letterSpacing: '0.06em', textTransform: 'uppercase', fontWeight: 600, marginBottom: 10 }}>Leads by Source</div>
             {Object.entries({
-              craigslist: 'Craigslist',
               zillow_fsbo: 'Zillow FSBO',
               forsalebyowner: 'ForSaleByOwner',
               fsbo_com: 'FSBO.com',
