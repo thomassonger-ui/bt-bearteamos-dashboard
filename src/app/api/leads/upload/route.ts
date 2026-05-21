@@ -3,7 +3,7 @@
  * Accepts a CSV file, parses leads, validates fields,
  * deduplicates within batch, and stores in Supabase.
  *
- * Requires: Authorization: Bearer <INTERNAL_API_TOKEN>
+ * Requires: Authorization: Bearer <INTERNAL_API_KEY>
  * Body: multipart/form-data with field "file" (CSV)
  */
 

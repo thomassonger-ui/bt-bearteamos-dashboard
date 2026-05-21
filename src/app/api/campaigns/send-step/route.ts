@@ -3,7 +3,7 @@
  * Trigger one email step for all eligible leads in a batch.
  * Uses SendGrid dynamic templates — personalized per lead.
  *
- * Requires: Authorization: Bearer <INTERNAL_API_TOKEN>
+ * Requires: Authorization: Bearer <INTERNAL_API_KEY>
  * Body: { "batchId": "string", "step": number }
  */
 
