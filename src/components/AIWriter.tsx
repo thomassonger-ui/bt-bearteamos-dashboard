@@ -51,18 +51,11 @@ export default function AIWriter({ open, onClose }: AIWriterProps) {
         if (user.user_metadata?.phone) setAgentPhone(user.user_metadata.phone)
         return
       }
-      // Fall back to sessionStorage / legacy API
-      const id = sessionStorage.getItem('bt_agent_id')
-      if (id) {
-        fetch(`/api/auth?agentId=${encodeURIComponent(id)}`)
-          .then(r => r.json())
-          .then(data => {
-            if (data.name) setAgentName(data.name)
-            if (data.phone) setAgentPhone(data.phone)
-            if (data.email) setAgentEmail(data.email)
-          })
-          .catch(() => {})
-      }
+      // Fall back to sessionStorage values set at login by /app/login
+      const storedName = sessionStorage.getItem('bt_agent_name')
+      const storedEmail = sessionStorage.getItem('bt_username')
+      if (storedName) setAgentName(storedName)
+      if (storedEmail) setAgentEmail(storedEmail)
     }
     loadAgent()
   }, [])
