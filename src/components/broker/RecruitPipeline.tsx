@@ -261,15 +261,41 @@ Sarah Kim,sarah@example.com,321-555-5678,eXp Realty,8`}
                 {/* Header */}
                 <div onClick={() => setExpandedId(expanded ? null : lead.id)} style={{
                   padding: '10px 14px', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
                 }}>
-                  <div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600 }}>{lead.name}</div>
                     <div style={{ fontSize: 11, color: 'var(--bt-text-dim)' }}>
                       {lead.brokerage || 'Unknown brokerage'} &middot; {lead.deal_count ? `${lead.deal_count} deals/yr` : 'N/A'} &middot; {d}d ago
                     </div>
                   </div>
-                  <span style={{ fontSize: 12, color: 'var(--bt-text-dim)' }}>{expanded ? '\u25B2' : '\u25BC'}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {/* Inline quick-action: Onboard This Recruit (always visible on row) */}
+                    {!lead.onboarded_at && lead.email && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const confirmed = window.confirm(
+                            `Onboard ${lead.name}?\n\nThis will:\n  \u2022 Create their BearTeamOS login\n  \u2022 Email them an invite to set their password\n  \u2022 Create their agent profile linked to their login\n  \u2022 Mark this recruit as closed_won`
+                          )
+                          if (confirmed) onConvert(lead.id)
+                        }}
+                        title="Send invite email, create agent row, link Supabase login"
+                        style={{
+                          fontSize: 11, padding: '5px 10px', fontWeight: 700,
+                          background: '#4CAF50', color: '#fff',
+                          border: 'none', borderRadius: 4, cursor: 'pointer',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >Onboard \u2192</button>
+                    )}
+                    {lead.onboarded_at && (
+                      <span style={{ fontSize: 10, padding: '5px 10px', color: '#4CAF50', fontWeight: 600, border: '1px solid #4CAF50', borderRadius: 4 }}>
+                        Onboarded
+                      </span>
+                    )}
+                    <span style={{ fontSize: 12, color: 'var(--bt-text-dim)' }}>{expanded ? '\u25B2' : '\u25BC'}</span>
+                  </div>
                 </div>
 
                 {/* Expanded */}
