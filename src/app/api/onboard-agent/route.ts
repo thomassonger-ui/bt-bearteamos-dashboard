@@ -16,6 +16,11 @@ function getAdminClient() {
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ?? 'https://bearteam-os-dashboard.vercel.app'
 
+/** Lowercase, dot-separated, no special chars — matches old onboard-agent format */
+function generateUsername(name: string): string {
+  return name.toLowerCase().replace(/[^a-z\s]/g, '').trim().replace(/\s+/g, '.')
+}
+
 /**
  * POST /api/onboard-agent
  *
@@ -128,12 +133,31 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 4. Create the agents row, linked to the auth user ────────────────────
+    // Generate username (kept for back-compat with existing schema — may be NOT NULL)
+    const username = generateUsername(lead.name)
+
+    // Check username collision and append a digit if needed
+    let finalUsername = username
+    let suffix = 1
+    while (true) {
+      const { data: existingUsername } = await admin
+        .from('agents')
+        .select('id')
+        .eq('username', finalUsername)
+        .maybeSingle()
+      if (!existingUsername) break
+      finalUsername = `${username}${suffix}`
+      suffix++
+      if (suffix > 99) break
+    }
+
     const { data: agent, error: agentErr } = await admin
       .from('agents')
       .insert({
         name: lead.name,
         email,
         phone: lead.phone ?? null,
+        username: finalUsername,
         auth_user_id: authUserId,
         stage: 'Onboarding',
         onboarding_stage: 0,
