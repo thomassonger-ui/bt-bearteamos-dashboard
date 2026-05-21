@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
@@ -307,7 +307,18 @@ async function scrapeZillow(): Promise<Lead[]> {
 }
 
 // ─── MAIN HANDLER ───────────────────────────────────────────────────────────
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // Auth — allow Vercel cron (by user-agent in production) OR an authenticated
+  // bearer token for manual testing. Matches the pattern used by /api/cron/automation.
+  const authHeader = req.headers.get('authorization')
+  const isCron = req.headers.get('user-agent')?.includes('vercel-cron')
+  if (
+    authHeader !== `Bearer ${process.env.INTERNAL_API_KEY}` &&
+    !(isCron && process.env.NODE_ENV === 'production')
+  ) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
   const startTime = Date.now()
 
   // Scrape all sources
