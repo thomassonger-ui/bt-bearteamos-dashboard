@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 120 // allow time for skip trace API calls
 
 import { NextRequest, NextResponse } from 'next/server'
+import { isAdmin } from '@/lib/admins'
 import { createClient } from '@supabase/supabase-js'
 import { skipTraceAddress } from '@/lib/skipTrace'
 
@@ -27,10 +28,7 @@ async function verifyAdmin(req: NextRequest): Promise<boolean> {
       const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       const sb = createClient(url, anon)
       const { data } = await sb.auth.getUser(token)
-      if (data?.user?.email) {
-        const adminEmails = (process.env.ADMIN_EMAILS ?? '').split(',').map(e => e.trim())
-        if (adminEmails.includes(data.user.email)) return true
-      }
+      if (data?.user?.email && isAdmin(data.user.email)) return true
     } catch {}
   }
   return false

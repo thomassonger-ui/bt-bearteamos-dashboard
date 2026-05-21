@@ -4,6 +4,7 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
+import { isAdmin } from '@/lib/admins'
 import { createClient } from '@supabase/supabase-js'
 
 async function verifyAdmin(req: NextRequest): Promise<boolean> {
@@ -19,10 +20,7 @@ async function verifyAdmin(req: NextRequest): Promise<boolean> {
       )
       const { data: { user } } = await sb.auth.getUser(token)
       if (user?.email) {
-        const adminEmails = (
-          process.env.ADMIN_EMAILS ?? 'thomas.songer@gmail.com,tom@bearteam.com,bethanne@bearteam.com,veronica@bearteam.com'
-        ).split(',').map(e => e.trim().toLowerCase())
-        if (adminEmails.includes(user.email.toLowerCase())) return true
+        if (isAdmin(user.email)) return true
       }
     } catch {}
   }

@@ -24,8 +24,6 @@ import { rankLeads, generateAlerts } from '@/lib/intelligence'
 import type { RankedLead, LeadAlert } from '@/lib/intelligence'
 import type { Agent, Task, ComplianceRecord, Pipeline, ActivityLog } from '@/types'
 
-const SUPER_ADMIN_EMAIL = 'tom@bearteam.com'
-
 interface AuthUser {
   id: string
   email: string
@@ -87,20 +85,20 @@ export default function BrokerPage() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      // Check sessionStorage first for immediate render
-      const storedEmail = sessionStorage.getItem('bt_user_email') ?? ''
-      if (storedEmail === SUPER_ADMIN_EMAIL) {
-        setCurrentUserEmail(storedEmail)
-        setIsSuperAdmin(true)
-      }
-      // Also verify via Supabase auth
+      // Super-admin flag is set by /api/auth/session at login time and persisted
+      // in sessionStorage. Server is the source of truth — we just read the flag here.
+      const isSuper = sessionStorage.getItem('bt_is_super_admin') === 'true'
+      setIsSuperAdmin(isSuper)
+
+      // Display-only: surface the logged-in email in the UI
+      const storedEmail = sessionStorage.getItem('bt_username') ?? ''
+      if (storedEmail) setCurrentUserEmail(storedEmail)
+
+      // Re-verify against Supabase to catch session expiry
       import('@/lib/supabase').then(({ getSupabase }) => {
         getSupabase().auth.getUser().then(({ data }: { data: { user: { email?: string } | null } }) => {
           const email = data?.user?.email ?? ''
-          setCurrentUserEmail(email)
-          setIsSuperAdmin(email === SUPER_ADMIN_EMAIL)
-          // Store for next render
-          if (email) sessionStorage.setItem('bt_user_email', email)
+          if (email) setCurrentUserEmail(email)
         })
       })
     }
@@ -288,11 +286,11 @@ export default function BrokerPage() {
                       {authUsers.map((u, i) => (
                         <tr key={u.id} style={{
                           borderBottom: i < authUsers.length - 1 ? '1px solid var(--bt-border)' : 'none',
-                          background: u.email === SUPER_ADMIN_EMAIL ? 'rgba(245,158,11,0.04)' : 'transparent',
+                          background: u.email.toLowerCase() === currentUserEmail.toLowerCase() && isSuperAdmin ? 'rgba(245,158,11,0.04)' : 'transparent',
                         }}>
                           <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--bt-text)' }}>
                             {u.email}
-                            {u.email === SUPER_ADMIN_EMAIL && (
+                            {u.email.toLowerCase() === currentUserEmail.toLowerCase() && isSuperAdmin && (
                               <span style={{ marginLeft: 8, fontSize: 9, color: '#f59e0b', fontWeight: 700, letterSpacing: '0.06em' }}>SUPER ADMIN</span>
                             )}
                           </td>
@@ -310,7 +308,7 @@ export default function BrokerPage() {
                             {new Date(u.created_at).toLocaleDateString()}
                           </td>
                           <td style={{ padding: '12px 16px' }}>
-                            {u.email !== SUPER_ADMIN_EMAIL && (
+                            {!(u.email.toLowerCase() === currentUserEmail.toLowerCase() && isSuperAdmin) && (
                               <div style={{ display: 'flex', gap: 6 }}>
                                 <button onClick={() => handleAccessAction('reset', u.email!)} style={{
                                   fontSize: 10, padding: '4px 10px', fontWeight: 600,

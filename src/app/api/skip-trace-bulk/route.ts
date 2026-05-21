@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
 import { NextRequest, NextResponse } from 'next/server'
+import { isAdmin } from '@/lib/admins'
 import { createClient } from '@supabase/supabase-js'
 import { skipTraceAddress } from '@/lib/skipTrace'
 
@@ -21,10 +22,7 @@ async function verifyAdmin(req: NextRequest): Promise<boolean> {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       )
       const { data } = await sb.auth.getUser(token)
-      if (data?.user?.email) {
-        const adminEmails = (process.env.ADMIN_EMAILS ?? '').split(',').map(e => e.trim())
-        if (adminEmails.includes(data.user.email)) return true
-      }
+      if (data?.user?.email && isAdmin(data.user.email)) return true
     } catch {}
   }
   return false

@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { isAdmin, isSuperAdmin } from '@/lib/admins'
 
 export async function POST(req: Request) {
   try {
@@ -17,15 +18,9 @@ export async function POST(req: Request) {
 
     const email = user.email?.toLowerCase() ?? ''
 
-    // Super admin — full broker access (Bethanne)
-    const superAdminEmails = (process.env.SUPER_ADMIN_EMAILS ?? 'bethanne@bearteam.com')
-      .split(',').map(e => e.trim().toLowerCase())
-    const is_super_admin = superAdminEmails.includes(email)
-
-    // Admin — brokerage staff access (Veronica + Tom)
-    const adminEmails = (process.env.ADMIN_EMAILS ?? 'thomas.songer@gmail.com,tom@bearteam.com,veronica@bearteam.com')
-      .split(',').map(e => e.trim().toLowerCase())
-    const is_admin = is_super_admin || adminEmails.includes(email)
+    // Admin/super-admin classification — sourced from lib/admins
+    const is_super_admin = isSuperAdmin(email)
+    const is_admin = isAdmin(email)
 
     const sessionToken = process.env.SESSION_TOKEN ?? ''
     const cookieOpts = {

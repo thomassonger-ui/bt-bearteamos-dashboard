@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { isSuperAdmin } from '@/lib/admins'
 
-const SUPER_ADMIN_EMAILS = (process.env.SUPER_ADMIN_EMAILS ?? 'tom@bearteam.com,bethanne@bearteam.com')
-  .split(',').map(e => e.trim().toLowerCase())
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -23,7 +22,7 @@ async function verifySuperAdmin(req: NextRequest): Promise<boolean> {
   const { data: { user }, error } = await anonClient.auth.getUser(accessToken)
   if (error || !user) return false
 
-  return SUPER_ADMIN_EMAILS.includes(user.email?.toLowerCase() ?? '')
+  return isSuperAdmin(user.email)
 }
 
 export async function POST(req: NextRequest) {
