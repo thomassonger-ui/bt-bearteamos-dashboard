@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic'
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireUser } from '@/lib/requireUser'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,7 +10,10 @@ const supabase = createClient(
 )
 
 // Returns array of 13 weekly buckets (90 days) with calls and closings
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
+  const authError = requireUser(req)
+  if (authError) return authError
+
   try {
     const { searchParams } = new URL(req.url)
     const agentId = searchParams.get('agentId')

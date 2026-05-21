@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
+import { requireUser } from '@/lib/requireUser'
 
 const BUCKET = 'escrow-docs'
 
 export async function POST(req: NextRequest) {
+  const authError = requireUser(req)
+  if (authError) return authError
+
   try {
     const formData = await req.formData()
     const file = formData.get('file') as File | null

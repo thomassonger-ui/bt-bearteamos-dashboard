@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
+import { requireUser } from '@/lib/requireUser'
 
 // ─── Critical Deadline Tracker (offsets from Effective Date) ─────────────────
 // Based on BearTeam Transaction Checklist PDF — Section 2
@@ -48,6 +49,9 @@ function addDays(isoOrDate: string, days: number): string {
 }
 
 export async function POST(req: NextRequest) {
+  const authError = requireUser(req)
+  if (authError) return authError
+
   try {
     const body = await req.json()
     const { leadId, agentId, effectiveDate } = body as {

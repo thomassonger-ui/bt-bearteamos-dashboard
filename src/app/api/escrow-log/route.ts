@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabase } from '@/lib/supabase'
+import { requireUser } from '@/lib/requireUser'
 
 export async function POST(req: NextRequest) {
+  const authError = requireUser(req)
+  if (authError) return authError
+
   try {
     const { leadId, user, action } = await req.json()
     if (!leadId || !user || !action) {
