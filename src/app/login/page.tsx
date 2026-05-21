@@ -73,12 +73,14 @@ export default function LoginPage() {
         }).catch(() => {})
         runEngine(agent.id).catch(() => {})
       } else if (!sessionData.is_admin) {
-        // Non-admin agents only: fallback to first agent
-        const fallback = await getFirstAgent()
-        if (fallback) {
-          sessionStorage.setItem('bt_agent_id', fallback.id)
-          sessionStorage.setItem('bt_agent_name', fallback.name)
-        }
+        // No agents row for this email — DO NOT fall back to getFirstAgent.
+        // That would load another agent's data (privacy leak). Instead, sign
+        // them out and show a clear error so they contact the broker.
+        await supabase.auth.signOut()
+        sessionStorage.clear()
+        setError('Your login works but your agent profile is not set up yet. Contact Tom or Bethanne to finish onboarding.')
+        setLoading(false)
+        return
       }
 
       // Admins go to broker view; agents go to dashboard

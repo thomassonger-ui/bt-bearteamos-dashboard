@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
   try {
     if (action === 'invite') {
       const { error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/onboarding`,
+        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://bearteam-os-dashboard.vercel.app'}/onboarding`,
       })
       if (error) {
         if (error.message.toLowerCase().includes('rate limit') || error.message.toLowerCase().includes('email')) {
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
           const { data: linkData } = await supabaseAdmin.auth.admin.generateLink({
             type: 'invite',
             email,
-            options: { redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/onboarding` },
+            options: { redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://bearteam-os-dashboard.vercel.app'}/onboarding` },
           })
           const link = linkData?.properties?.action_link ?? null
           return NextResponse.json({
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
 
     if (action === 'reset') {
       const { error } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
-        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL}/login`,
+        redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://bearteam-os-dashboard.vercel.app'}/login`,
       })
       if (error) return NextResponse.json({ error: error.message }, { status: 400 })
       return NextResponse.json({ ok: true, message: `Password reset sent to ${email}` })

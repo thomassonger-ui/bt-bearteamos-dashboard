@@ -76,11 +76,40 @@ export default function OnboardingPage() {
   }
 
   async function goToDashboard() {
-    // Set legacy session cookie via existing auth route
     const { data: { session } } = await supabase.auth.getSession()
-    if (session) {
-      sessionStorage.setItem('bt_access_token', session.access_token)
+    if (!session) {
+      // Session lost — bounce to login
+      router.push('/login')
+      return
     }
+
+    // Set bt_session httpOnly cookie that middleware checks. Without this,
+    // /dashboard immediately bounces back to /login and the agent has to
+    // re-enter the password they just set.
+    const res = await fetch('/api/auth/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token: session.access_token }),
+    })
+    const sessionData = await res.json().catch(() => ({}))
+
+    sessionStorage.setItem('bt_access_token', session.access_token)
+    sessionStorage.setItem('bt_username', email)
+    if (sessionData.is_admin) sessionStorage.setItem('bt_is_admin', 'true')
+    if (sessionData.is_super_admin) sessionStorage.setItem('bt_is_super_admin', 'true')
+
+    // Resolve agent_id so dashboard doesn't bounce to login on its own check
+    try {
+      const meRes = await fetch('/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+      })
+      const me = await meRes.json()
+      if (me.agentId) {
+        sessionStorage.setItem('bt_agent_id', me.agentId)
+        sessionStorage.setItem('bt_agent_name', me.name ?? '')
+      }
+    } catch { /* dashboard will redirect to login if missing — that's fine */ }
+
     router.push('/dashboard')
   }
 
