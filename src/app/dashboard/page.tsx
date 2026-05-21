@@ -163,7 +163,9 @@ export default function DashboardPage() {
       }
       const agentData = await getAgent(storedId)
       if (!agentData) { setLoading(false); return }
-      await runEngine(agentData.id)
+      // Engine is idempotent and runs hourly on cron — fire in background, don't block first paint.
+      // Saves ~5-15s on dashboard boot. New engine-created tasks appear on next refresh.
+      runEngine(agentData.id).catch(() => {})
       const [freshTasks, freshCompliance, pipelineData, metricsData] = await Promise.all([
         getTasks(agentData.id),
         getCompliance(agentData.id),
