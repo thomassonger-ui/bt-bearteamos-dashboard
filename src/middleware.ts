@@ -31,7 +31,6 @@ export const config = {
     '/hot-leads/:path*',
     '/knowledge/:path*',
     '/memory/:path*',
-    '/onboarding/:path*',
     '/settings/:path*',
   ],
 }
