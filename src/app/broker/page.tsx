@@ -398,13 +398,16 @@ export default function BrokerPage() {
                     })
                     const data = await res.json()
                     if (res.ok) {
-                      setConvertResult(`Agent created: ${data.agent.name} (username: ${data.credentials.username}, password: ${data.credentials.password}). Welcome email sent.`)
+                      // Show invite-sent message (no plaintext password — agent sets their
+                      // own via Supabase invite email). Note: data.inviteNote is present
+                      // if Supabase email was rate-limited and a manual link must be sent.
+                      setConvertResult(data.inviteNote ?? data.message ?? `Invite sent to ${data.agent.name} (${data.agent.email}).`)
                       setRecruitLeads(await getRecruitLeads())
                       await loadAll()
                     } else {
                       setConvertResult(`Error: ${data.error}`)
                     }
-                  } catch { setConvertResult('Error converting recruit.') }
+                  } catch { setConvertResult('Error onboarding recruit.') }
                   finally { setConvertingId(null) }
                 }}
                 onDelete={async (leadId) => {

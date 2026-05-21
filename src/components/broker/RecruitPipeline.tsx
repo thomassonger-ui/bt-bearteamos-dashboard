@@ -338,12 +338,26 @@ Sarah Kim,sarah@example.com,321-555-5678,eXp Realty,8`}
                         }}>Email</a>
                       )}
 
-                      {stage === 'closed_won' && !lead.onboarded_at && (
-                        <button onClick={() => onConvert(lead.id)} style={{
-                          fontSize: 11, padding: '6px 12px', fontWeight: 700,
-                          background: '#4CAF50', color: '#fff',
-                          border: 'none', borderRadius: 4, cursor: 'pointer',
-                        }}>Convert to Agent</button>
+                      {!lead.onboarded_at && lead.email && (
+                        <button
+                          onClick={() => {
+                            const confirmed = window.confirm(
+                              `Onboard ${lead.name}?\n\nThis will:\n  • Create their BearTeamOS login\n  • Email them an invite to set their password\n  • Create their agent profile linked to their login\n  • Mark this recruit as closed_won`
+                            )
+                            if (confirmed) onConvert(lead.id)
+                          }}
+                          style={{
+                            fontSize: 11, padding: '6px 12px', fontWeight: 700,
+                            background: '#4CAF50', color: '#fff',
+                            border: 'none', borderRadius: 4, cursor: 'pointer',
+                          }}
+                          title="Send invite email, create agent row, link Supabase login"
+                        >Onboard This Recruit</button>
+                      )}
+                      {!lead.onboarded_at && !lead.email && (
+                        <span style={{ fontSize: 10, padding: '6px 12px', color: 'var(--bt-text-dim)', fontStyle: 'italic' }}>
+                          Add email to enable onboarding
+                        </span>
                       )}
 
                       {lead.onboarded_at && (
