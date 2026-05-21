@@ -287,7 +287,7 @@ Sarah Kim,sarah@example.com,321-555-5678,eXp Realty,8`}
                           border: 'none', borderRadius: 4, cursor: 'pointer',
                           whiteSpace: 'nowrap',
                         }}
-                      >Onboard \u2192</button>
+                      >Onboard →</button>
                     )}
                     {lead.onboarded_at && (
                       <span style={{ fontSize: 10, padding: '5px 10px', color: '#4CAF50', fontWeight: 600, border: '1px solid #4CAF50', borderRadius: 4 }}>
