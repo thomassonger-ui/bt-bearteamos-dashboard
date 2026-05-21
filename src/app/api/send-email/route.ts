@@ -2,12 +2,13 @@ export const dynamic = "force-dynamic"
 
 import { NextRequest, NextResponse } from "next/server"
 import sgMail from "@sendgrid/mail"
-import { requireAuth } from "@/lib/auth"
+import { requireUserOrInternal } from "@/lib/requireUser"
 
 export async function POST(req: NextRequest) {
-  // Auth gate — must be called with Authorization: Bearer <INTERNAL_API_KEY>
+  // Auth gate — accepts either a logged-in user (bt_session cookie set by
+  // /api/auth/session) OR Bearer INTERNAL_API_KEY for server-side callers.
   // Prevents anonymous callers from burning SendGrid credit / spoofing from our domain.
-  const authError = requireAuth(req)
+  const authError = requireUserOrInternal(req)
   if (authError) return authError
 
   try {

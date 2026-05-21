@@ -43,3 +43,28 @@ export function requireAdmin(req: NextRequest): NextResponse | null {
   }
   return null
 }
+
+/**
+ * Accepts EITHER the bt_session cookie OR Bearer INTERNAL_API_KEY.
+ *
+ * Use for routes that are called from both the browser (UI buttons) and
+ * server-side / external automation. /api/send-email is the canonical
+ * case — agents click "Send" in the AI Writer (cookie path), but cron
+ * jobs and integrations may also hit it (bearer path).
+ */
+export function requireUserOrInternal(req: NextRequest): NextResponse | null {
+  // Try cookie first (cheap, most common path)
+  const expectedSession = process.env.SESSION_TOKEN
+  const sessionCookie = req.cookies.get('bt_session')?.value
+  if (expectedSession && sessionCookie === expectedSession) return null
+
+  // Fall back to bearer
+  const expectedKey = process.env.INTERNAL_API_KEY
+  if (expectedKey) {
+    const header = req.headers.get('authorization') ?? ''
+    const provided = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
+    if (provided === expectedKey) return null
+  }
+
+  return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+}
