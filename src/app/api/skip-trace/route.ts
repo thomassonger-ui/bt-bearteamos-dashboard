@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { skipTraceAddress } from '@/lib/skipTrace'
 import { getSupabase } from '@/lib/supabase'
+import { requireUser } from '@/lib/requireUser'
 
 // POST /api/skip-trace
 // Called after agent accepts a hot lead.
 // Looks up owner contact info via Tracerfy and writes back to Supabase.
 
 export async function POST(req: NextRequest) {
+  const authError = requireUser(req)
+  if (authError) return authError
+
   try {
     const { leadId, address, city, zip } = await req.json()
 

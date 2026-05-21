@@ -1,8 +1,12 @@
 export const dynamic = 'force-dynamic'
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
+import { requireUser } from '@/lib/requireUser'
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const authError = requireUser(req)
+  if (authError) return authError
+
   try {
     const { messages } = await req.json()
     if (!messages?.length) {

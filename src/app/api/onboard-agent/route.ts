@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic'
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireAdmin } from '@/lib/requireUser'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -19,7 +20,10 @@ function generatePassword(): string {
   return pw
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  const authError = requireAdmin(req)
+  if (authError) return authError
+
   try {
     const { leadId, role } = await req.json()
     if (!leadId) return NextResponse.json({ error: 'missing leadId' }, { status: 400 })
